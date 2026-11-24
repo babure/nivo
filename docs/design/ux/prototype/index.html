@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NIVO Onboarding Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --orange: #FB770B;
+      --saffron: #E8A55C;
+      --beige: #F5EFE6;
+      --charcoal: #2D2A26;
+      --white: #fff;
+      --muted: #6b6560;
+      --ok: #2f6b3a;
+      --err: #a33;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Poppins, sans-serif;
+      background: linear-gradient(180deg, var(--beige) 0%, #fff 40%);
+      color: var(--charcoal);
+      min-height: 100vh;
+    }
+    header {
+      padding: 1rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand { font-weight: 700; font-size: 1.4rem; letter-spacing: 0.04em; }
+    .tag { color: var(--muted); font-size: 0.85rem; }
+    main { max-width: 440px; margin: 0 auto; padding: 0 1.25rem 3rem; }
+    .stepper {
+      display: flex;
+      gap: 0.35rem;
+      margin: 0.5rem 0 1.25rem;
+    }
+    .stepper span {
+      flex: 1;
+      height: 6px;
+      border-radius: 999px;
+      background: #ddd4c8;
+    }
+    .stepper span.on { background: var(--orange); }
+    .stepper span.done { background: var(--saffron); }
+    h1 { font-size: 1.45rem; margin: 0 0 0.35rem; }
+    .sub { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.25rem; }
+    .card {
+      background: var(--white);
+      border-radius: 16px;
+      padding: 1.25rem;
+      box-shadow: 0 8px 24px rgba(45,42,38,0.06);
+    }
+    label { display: block; font-size: 0.85rem; font-weight: 500; margin: 0.75rem 0 0.3rem; }
+    input, select, textarea {
+      width: 100%;
+      padding: 0.75rem 0.85rem;
+      border: 1px solid #d9d0c4;
+      border-radius: 10px;
+      font: inherit;
+      min-height: 44px;
+    }
+    .hint { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
+    .check { display: flex; gap: 0.6rem; align-items: flex-start; margin: 0.85rem 0; font-size: 0.9rem; }
+    .check input { width: auto; min-height: auto; margin-top: 0.2rem; }
+    button.primary {
+      width: 100%;
+      margin-top: 1rem;
+      background: var(--orange);
+      color: #fff;
+      border: 0;
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+      font: inherit;
+      font-weight: 600;
+      min-height: 48px;
+      cursor: pointer;
+    }
+    button.ghost {
+      width: 100%;
+      margin-top: 0.5rem;
+      background: transparent;
+      border: 1px solid #d9d0c4;
+      border-radius: 12px;
+      padding: 0.75rem;
+      font: inherit;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .banner {
+      background: #fff6eb;
+      border: 1px solid var(--saffron);
+      border-radius: 10px;
+      padding: 0.75rem;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .nav { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .nav button {
+      font-size: 0.75rem;
+      border: 1px solid #d9d0c4;
+      background: #fff;
+      border-radius: 999px;
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+    }
+    .dash-card {
+      border: 1px solid #e6ddd2;
+      border-radius: 14px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    .dash-card.locked { opacity: 0.65; }
+    .tag-pill {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      background: #eee;
+    }
+    .tag-pill.ok { background: #e4f3e7; color: var(--ok); }
+    .tag-pill.warn { background: #fff0e0; color: #9a4e00; }
+    .why { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="brand">NIVO</div>
+      <div class="tag">A place for new beginnings</div>
+    </div>
+  </header>
+  <main>
+    <div class="nav" aria-label="Prototype screens">
+      <button type="button" data-go="register">1 Register</button>
+      <button type="button" data-go="verify">2 Verify</button>
+      <button type="button" data-go="pay">3 Pay</button>
+      <button type="button" data-go="details">4 Details</button>
+      <button type="button" data-go="dash">5 Dashboard</button>
+    </div>
+
+    <section id="register" class="screen active">
+      <div class="stepper" aria-hidden="true"><span class="on"></span><span></span><span></span><span></span><span></span></div>
+      <h1>Create your account</h1>
+      <p class="sub">Step 1 of 5 · about 2 minutes</p>
+      <div class="card">
+        <div class="banner">You were invited by <strong>Sample Consultancy</strong>.</div>
+        <label for="name">Full name</label>
+        <input id="name" autocomplete="name" />
+        <div class="hint">Exactly as written in your passport.</div>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" />
+        <label for="phone">Phone</label>
+        <input id="phone" type="tel" autocomplete="tel" placeholder="+49…" />
+        <label for="country">Country</label>
+        <select id="country"><option>India</option><option>Germany</option><option>Other</option></select>
+        <label for="intake">Planned intake</label>
+        <select id="intake"><option>Summer 2027</option><option>Winter 2027/28</option></select>
+        <label for="ref">Referred by</label>
+        <input id="ref" value="Sample Consultancy" />
+        <label for="pw">Password</label>
+        <input id="pw" type="password" autocomplete="new-password" />
+        <div class="check"><input type="checkbox" id="age" /><label for="age">I confirm I am 18 or older</label></div>
+        <div class="check"><input type="checkbox" id="terms" /><label for="terms">I accept the Terms and Privacy Policy</label></div>
+        <button class="primary" type="button" data-go="verify">Create account</button>
+      </div>
+    </section>
+
+    <section id="verify" class="screen">
+      <div class="stepper"><span class="done"></span><span class="on"></span><span></span><span></span><span></span></div>
+      <h1>Check your inbox</h1>
+      <p class="sub">Step 2 of 5 · we sent a link to your email</p>
+      <div class="card">
+        <p>Open the email and tap Verify. Wrong address? Change it.</p>
+        <button class="primary" type="button" data-go="pay">I’ve verified (demo)</button>
+        <button class="ghost" type="button">Resend email</button>
+      </div>
+    </section>
+
+    <section id="pay" class="screen">
+      <div class="stepper"><span class="done"></span><span class="done"></span><span class="on"></span><span></span><span></span></div>
+      <h1>Pay €149 once</h1>
+      <p class="sub">Step 3 of 5 · unlocks your dashboard</p>
+      <div class="card">
+        <p>This fee covers NIVO’s referral and support. Blocked-account funds and insurance premiums are paid directly to partners, not to NIVO.</p>
+        <div class="check"><input type="checkbox" id="start" /><label for="start">I ask NIVO to start the service now (affects withdrawal rights)</label></div>
+        <button class="primary" type="button" data-go="details">Order with obligation to pay</button>
+      </div>
+    </section>
+
+    <section id="details" class="screen">
+      <div class="stepper"><span class="done"></span><span class="done"></span><span class="done"></span><span class="on"></span><span></span></div>
+      <h1>Your details</h1>
+      <p class="sub">Step 4 of 5 · encrypted · stored in Germany</p>
+      <div class="card">
+        <label for="father">Father’s name</label>
+        <input id="father" />
+        <div class="why">Why we ask: identity check. Who sees it: NIVO admins only.</div>
+        <label for="mother">Mother’s name</label>
+        <input id="mother" />
+        <label for="pass">Passport number</label>
+        <input id="pass" autocomplete="off" />
+        <label for="scan">Passport scan (JPG/PNG/PDF)</label>
+        <input id="scan" type="file" accept=".jpg,.jpeg,.png,.pdf" />
+        <label for="sig">Signature (type for demo)</label>
+        <input id="sig" placeholder="Type your full name" />
+        <div class="check"><input type="checkbox" id="idok" /><label for="idok">I confirm this data is correct and consent to processing</label></div>
+        <button class="primary" type="button" data-go="dash">Save and continue</button>
+      </div>
+    </section>
+
+    <section id="dash" class="screen">
+      <div class="stepper"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="on"></span></div>
+      <h1>Your dashboard</h1>
+      <p class="sub">Next step: open your Blocked Account</p>
+      <div class="dash-card">
+        <span class="tag-pill warn">Available</span>
+        <h2 style="margin:0.4rem 0;font-size:1.05rem;">1. Blocked Account</h2>
+        <p class="why">Use your name exactly as in your passport. You continue on the partner’s website.</p>
+        <button class="primary" type="button">Open Blocked Account</button>
+      </div>
+      <div class="dash-card locked">
+        <span class="tag-pill">Locked · 0/1</span>
+        <h2 style="margin:0.4rem 0;font-size:1.05rem;">2. SIM Card</h2>
+        <p class="why">Complete your Blocked Account to unlock your SIM card.</p>
+      </div>
+      <div class="dash-card">
+        <span class="tag-pill ok">Available</span>
+        <h2 style="margin:0.4rem 0;font-size:1.05rem;">3. Accommodation</h2>
+        <button class="ghost" type="button">Send enquiry</button>
+      </div>
+      <div class="dash-card">
+        <span class="tag-pill warn">Coming soon</span>
+        <h2 style="margin:0.4rem 0;font-size:1.05rem;">4. Job References</h2>
+        <button class="ghost" type="button">Notify me</button>
+      </div>
+    </section>
+  </main>
+  <script>
+    function show(id) {
+      document.querySelectorAll('.screen').forEach((el) => el.classList.remove('active'));
+      const t = document.getElementById(id);
+      if (t) t.classList.add('active');
+      window.scrollTo(0, 0);
+    }
+    document.querySelectorAll('[data-go]').forEach((btn) => {
+      btn.addEventListener('click', () => show(btn.getAttribute('data-go')));
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-orange: #FB770B;
+  --color-saffron: #E8A55C;
+  --color-beige: #F5EFE6;
+  --color-charcoal: #2D2A26;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply font-sans text-charcoal antialiased;
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-beige);
+    background-image:
+      radial-gradient(60rem 36rem at 85% -10%, rgb(232 165 92 / 0.45), transparent 60%),
+      radial-gradient(48rem 30rem at -10% 110%, rgb(251 119 11 / 0.14), transparent 60%),
+      linear-gradient(180deg, #f8f3ea 0%, var(--color-beige) 55%, #efe4d3 100%);
+    background-attachment: fixed;
+  }
+
+  a {
+    @apply underline-offset-4;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-orange);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex min-h-tap min-w-tap items-center justify-center gap-2 rounded-xl px-6 py-3
+      text-base font-semibold no-underline transition
+      disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply btn bg-orange text-white shadow-sm hover:bg-orange-dark active:scale-[0.99];
+  }
+  .btn-secondary {
+    @apply btn border-2 border-charcoal/20 bg-white/70 text-charcoal hover:border-orange hover:bg-white;
+  }
+  .input {
+    @apply min-h-tap w-full rounded-xl border-2 border-charcoal/15 bg-white px-4 py-2.5 text-base
+      text-charcoal placeholder:text-charcoal/40 focus:border-orange focus:outline-none;
+  }
+  .surface {
+    @apply rounded-2xl border border-charcoal/10 bg-white/80 p-5 shadow-sm backdrop-blur sm:p-6;
+  }
+}

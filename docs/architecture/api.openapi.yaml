@@ -1,0 +1,49 @@
+openapi: 3.0.3
+info:
+  title: NIVO API
+  version: 0.1.0
+servers:
+  - url: http://localhost:4000
+paths:
+  /health:
+    get:
+      summary: Health
+      responses:
+        "200":
+          description: OK
+  /v1/auth/register:
+    post:
+      summary: Register student
+      responses:
+        "201":
+          description: Pending verification
+  /v1/auth/login:
+    post:
+      summary: Login
+      responses:
+        "200":
+          description: Session cookie set
+  /v1/payments/checkout:
+    post:
+      summary: Create Stripe checkout
+      responses:
+        "200":
+          description: Checkout URL
+  /v1/payments/webhook:
+    post:
+      summary: Stripe webhook
+      responses:
+        "200":
+          description: Processed or duplicate
+  /v1/dashboard/cards:
+    get:
+      summary: Student dashboard cards
+      responses:
+        "200":
+          description: Card list
+  /v1/identity:
+    post:
+      summary: Save identity vault payload
+      responses:
+        "200":
+          description: Saved

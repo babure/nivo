@@ -1,0 +1,18 @@
+{
+  "name": "nivo",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "test:unit": "pnpm --filter @nivo/shared test && pnpm --filter @nivo/api test",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "db:generate": "pnpm --filter @nivo/api db:generate",
+    "db:migrate": "pnpm --filter @nivo/api db:migrate"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

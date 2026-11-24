@@ -1,0 +1,57 @@
+import { Route, Routes } from "react-router-dom";
+import { Layout } from "./components/Layout";
+import { RequireAuth } from "./components/guards";
+import Home from "./pages/Home";
+import { Contact, Faq, HowItWorks, Services } from "./pages/Info";
+import { Cookies, Impressum, OurRole, Privacy, Terms, Withdrawal } from "./pages/legal/Legal";
+import Register from "./pages/Register";
+import { ForgotPassword, Login, ResetPassword, VerifyEmail } from "./pages/AuthPages";
+import Pay from "./pages/Pay";
+import IdentityOnboarding from "./pages/IdentityOnboarding";
+import Dashboard from "./pages/Dashboard";
+import { Accommodation, Documents, Profile } from "./pages/Student";
+import AdminRoutes from "./pages/admin/AdminShell";
+import ConsultancyRoutes from "./pages/Consultancy";
+import Referral from "./pages/Referral";
+import NotFound from "./pages/NotFound";
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<Home />} />
+        <Route path="how-it-works" element={<HowItWorks />} />
+        <Route path="services" element={<Services />} />
+        <Route path="faq" element={<Faq />} />
+        <Route path="contact" element={<Contact />} />
+
+        <Route path="terms" element={<Terms />} />
+        <Route path="cookies" element={<Cookies />} />
+        <Route path="our-role" element={<OurRole />} />
+        <Route path="privacy" element={<Privacy />} />
+        <Route path="impressum" element={<Impressum />} />
+        <Route path="withdrawal" element={<Withdrawal />} />
+
+        <Route path="register" element={<Register />} />
+        <Route path="login" element={<Login />} />
+        <Route path="forgot-password" element={<ForgotPassword />} />
+        <Route path="reset-password" element={<ResetPassword />} />
+        <Route path="verify-email" element={<VerifyEmail />} />
+        <Route path="r/:code" element={<Referral />} />
+
+        <Route element={<RequireAuth />}>
+          <Route path="pay" element={<Pay />} />
+          <Route path="onboarding/identity" element={<IdentityOnboarding />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="accommodation" element={<Accommodation />} />
+          <Route path="documents" element={<Documents />} />
+          <Route path="profile" element={<Profile />} />
+        </Route>
+
+        <Route path="admin/*" element={<AdminRoutes />} />
+        <Route path="consultancy/*" element={<ConsultancyRoutes />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  );
+}
