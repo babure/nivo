@@ -6,9 +6,10 @@ import { Button } from "../components/Button";
 import { GoogleSignInButton } from "../components/GoogleSignIn";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { resolvePostLoginPath } from "../lib/navigation";
 
 export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
-  const { signIn } = useAuth();
+  const { signIn, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -44,19 +45,20 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
         ...(needsTotp || totp ? { totp } : {}),
       });
       const from = (location.state as { from?: string } | null)?.from;
-      const isAdmin = user.role === "admin";
-      if (kind === "admin" && !isAdmin) {
+      if (kind === "admin" && user.role !== "admin") {
+        await signOut();
         setError("This account is not an admin account.");
         return;
       }
-      const dest =
-        from ??
-        (isAdmin || kind === "admin"
-          ? "/admin/students"
-          : user.role === "consultancy"
-            ? "/consultancy/dashboard"
-            : nextStudentPath(user));
-      navigate(dest, { replace: true });
+      if (kind === "student" && user.role === "admin") {
+        navigate("/admin/students", { replace: true });
+        return;
+      }
+      if (kind === "student" && user.role === "consultancy") {
+        navigate("/consultancy/dashboard", { replace: true });
+        return;
+      }
+      navigate(resolvePostLoginPath(user, from), { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === "AUTH_2FA_REQUIRED") {
         setNeedsTotp(true);
@@ -114,12 +116,6 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
       </form>
     </Page>
   );
-}
-
-function nextStudentPath(user: { paymentStatus: string; identityComplete: boolean }) {
-  if (user.paymentStatus !== "paid") return "/pay";
-  if (!user.identityComplete) return "/onboarding/identity";
-  return "/dashboard";
 }
 
 export function ForgotPassword() {

@@ -395,11 +395,15 @@ export class InMemoryRepositories implements Repositories {
     create: async (input) => {
       this.consultancyList.push({ ...input });
     },
+    list: async () => this.consultancyList.map((c) => ({ ...c })),
     findByReferralCode: async (code) => {
       const c = this.consultancyList.find((x) => x.referralCode.toUpperCase() === code.toUpperCase());
-      return c ? { id: c.id, name: c.name } : null;
+      return c ? { id: c.id, name: c.name, referralCode: c.referralCode } : null;
     },
     getMembership: async (userId) => this.memberships.get(userId) ?? null,
+    addMember: async (userId, consultancyId, role = "owner") => {
+      this.memberships.set(userId, { consultancyId, role });
+    },
     listSharedStudents: async (consultancyId) =>
       [...this.profileMap.values()]
         .filter((p) => p.consultancyId === consultancyId && p.shareProgressWithConsultancy)

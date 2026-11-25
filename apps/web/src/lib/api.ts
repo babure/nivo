@@ -81,11 +81,15 @@ export const api = {
 export async function uploadFile<T = unknown>(path: string, file: File): Promise<T> {
   const body = new FormData();
   body.append("file", file);
+  const headers: Record<string, string> = {};
+  const csrf = csrfToken ?? readCsrfCookie();
+  if (csrf) headers["X-CSRF-Token"] = csrf;
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method: "POST",
       credentials: "include",
+      headers,
       body,
     });
   } catch {

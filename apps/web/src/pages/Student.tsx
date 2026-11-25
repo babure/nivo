@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Field, Page } from "../components/Page";
+import { Field, FieldGrid, FormSection, Page } from "../components/Page";
 import { Button } from "../components/Button";
+import { useNavigate } from "react-router-dom";
 import { api, ApiError, uploadFile } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { logoutPathFor } from "../lib/navigation";
 
 type Lead = {
   id: string;
@@ -73,71 +75,76 @@ export function Accommodation() {
   }
 
   return (
-    <Page title="Housing" intro="Tell us city, budget and room type. An agent follows up with leads." narrow>
-      {leads.length > 0 && (
-        <div className="mb-6 space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-charcoal-soft">Your enquiries</h2>
-          {leads.map((l) => (
-            <div key={l.id} className="rounded-xl border border-charcoal/10 bg-white p-4 text-sm">
-              <p className="font-medium">
-                {l.city} · {l.roomType} · {l.budget}
-              </p>
-              <p className="mt-1 text-charcoal-soft">
-                Status: <span className="font-semibold text-charcoal">{l.status}</span>
-              </p>
-              {l.status !== "closed" && l.status !== "booked" && (
-                <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void withdraw(l.id)}>
-                  Withdraw
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Preferred city">
-          <input className="input" value={city} onChange={(e) => setCity(e.target.value)} required minLength={2} />
-        </Field>
-        <Field label="Monthly budget">
-          <input
-            className="input"
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
-            placeholder="e.g. 600–800 EUR"
-            required
-          />
-        </Field>
-        <Field label="Room type">
-          <select className="input" value={roomType} onChange={(e) => setRoomType(e.target.value)}>
-            <option value="shared">Shared room</option>
-            <option value="private">Private room</option>
-            <option value="studio">Studio</option>
-            <option value="apartment">Apartment</option>
-          </select>
-        </Field>
-        <Field label="Phone (international)" hint="e.g. +491701234567">
-          <input
-            className="input"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+49…"
-            required
-          />
-        </Field>
-        <Field label="Notes (optional)">
-          <textarea className="input min-h-24" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={1000} />
-        </Field>
-        {user && (
-          <p className="text-xs text-charcoal-soft">
-            Signed in as {user.email}. Payment and identity must be complete to submit.
-          </p>
+    <Page title="Housing" intro="City, budget and room type — an agent follows up with leads." compact>
+      <div className="space-y-4">
+        {leads.length > 0 && (
+          <FormSection title="Your enquiries">
+            {leads.map((l) => (
+              <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-mist/60 px-3 py-2.5 text-sm">
+                <div>
+                  <p className="font-medium">
+                    {l.city} · {l.roomType} · {l.budget}
+                  </p>
+                  <p className="text-charcoal-soft">
+                    Status: <span className="font-semibold text-charcoal">{l.status}</span>
+                  </p>
+                </div>
+                {l.status !== "closed" && l.status !== "booked" && (
+                  <Button variant="secondary" disabled={busy} onClick={() => void withdraw(l.id)}>
+                    Withdraw
+                  </Button>
+                )}
+              </div>
+            ))}
+          </FormSection>
         )}
-        {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
-        <Button type="submit" className="w-full" disabled={busy}>
-          {busy ? "Sending…" : "Request help"}
-        </Button>
-      </form>
+
+        <form onSubmit={onSubmit}>
+          <FormSection title="New enquiry" description="We’ll email Roshan within a minute.">
+            <FieldGrid>
+              <Field label="Preferred city">
+                <input className="input" value={city} onChange={(e) => setCity(e.target.value)} required minLength={2} />
+              </Field>
+              <Field label="Monthly budget">
+                <input
+                  className="input"
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                  placeholder="e.g. 600–800 EUR"
+                  required
+                />
+              </Field>
+              <Field label="Room type">
+                <select className="input" value={roomType} onChange={(e) => setRoomType(e.target.value)}>
+                  <option value="shared">Shared room</option>
+                  <option value="private">Private room</option>
+                  <option value="studio">Studio</option>
+                  <option value="apartment">Apartment</option>
+                </select>
+              </Field>
+              <Field label="Phone (international)" hint="e.g. +491701234567">
+                <input
+                  className="input"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+49…"
+                  required
+                />
+              </Field>
+              <Field label="Notes (optional)" className="sm:col-span-2">
+                <textarea className="input min-h-20" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={1000} />
+              </Field>
+            </FieldGrid>
+            {user && (
+              <p className="text-xs text-charcoal-soft">Signed in as {user.email}. Payment and identity must be complete.</p>
+            )}
+            {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
+            <Button type="submit" className="w-full sm:w-auto" disabled={busy}>
+              {busy ? "Sending…" : "Request help"}
+            </Button>
+          </FormSection>
+        </form>
+      </div>
     </Page>
   );
 }
@@ -214,64 +221,70 @@ export function Documents() {
   }
 
   return (
-    <Page title="Papers" intro="Invoices and encrypted identity uploads in one place." narrow>
-      {error && <p role="alert" className="mb-4 text-sm font-medium text-red-700">{error}</p>}
-      <section className="mb-8 space-y-3">
-        <h2 className="font-semibold">Invoices</h2>
-        {payments?.invoices?.length ? (
+    <Page title="Papers" intro="Invoices and encrypted identity uploads." compact>
+      <div className="space-y-4">
+        {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
+        <FormSection title="Invoices">
+          {payments?.invoices?.length ? (
+            <ul className="space-y-2 text-sm">
+              {payments.invoices.map((inv) => (
+                <li key={inv.number} className="rounded-xl bg-mist/60 px-3 py-2.5">
+                  {inv.number}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-charcoal-soft">No invoices yet.</p>
+          )}
+        </FormSection>
+        <FormSection title="Identity files">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {identity?.complete ? (
+              <p className="text-sm text-charcoal-soft">
+                Masked: {identity.fullName} · passport {identity.passportNumber}
+              </p>
+            ) : (
+              <p className="text-sm text-charcoal-soft">Complete identity onboarding first.</p>
+            )}
+            <Button variant="secondary" disabled={exporting} onClick={() => void exportIdentity()}>
+              {exporting ? "Exporting…" : "Export my data"}
+            </Button>
+          </div>
           <ul className="space-y-2 text-sm">
-            {payments.invoices.map((inv) => (
-              <li key={inv.number} className="rounded-xl border border-charcoal/10 bg-white px-4 py-3">
-                {inv.number}
+            {(identity?.files ?? []).map((f) => (
+              <li key={f.id} className="rounded-xl bg-mist/60 px-3 py-2.5">
+                {f.kind} · {f.mime} · {Math.round(f.sizeBytes / 1024)} KB
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-sm text-charcoal-soft">No invoices yet.</p>
-        )}
-      </section>
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="font-semibold">Identity files</h2>
-          <Button variant="secondary" disabled={exporting} onClick={() => void exportIdentity()}>
-            {exporting ? "Exporting…" : "Export my data"}
-          </Button>
-        </div>
-        {identity?.complete && (
-          <p className="text-sm text-charcoal-soft">
-            Masked: {identity.fullName} · passport {identity.passportNumber}
-          </p>
-        )}
-        <ul className="space-y-2 text-sm">
-          {(identity?.files ?? []).map((f) => (
-            <li key={f.id} className="rounded-xl border border-charcoal/10 bg-white px-4 py-3">
-              {f.kind} · {f.mime} · {Math.round(f.sizeBytes / 1024)} KB
-            </li>
-          ))}
-        </ul>
-        <div className="flex flex-wrap items-end gap-3">
-          <Field label="Upload kind">
-            <select className="input" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-              <option value="passport">Passport scan</option>
-              <option value="selfie">Selfie</option>
-              <option value="address_proof">Address proof</option>
-              <option value="signature">Signature PNG</option>
-            </select>
-          </Field>
-          <input
-            type="file"
-            accept={kind === "signature" ? "image/png" : "image/jpeg,image/png,application/pdf"}
-            disabled={uploading}
-            onChange={(e) => void onUpload(e.target.files?.[0] ?? null)}
-          />
-        </div>
-      </section>
+          <FieldGrid>
+            <Field label="Upload kind">
+              <select className="input" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+                <option value="passport">Passport scan</option>
+                <option value="selfie">Selfie</option>
+                <option value="address_proof">Address proof</option>
+                <option value="signature">Signature PNG</option>
+              </select>
+            </Field>
+            <Field label="File">
+              <input
+                className="input"
+                type="file"
+                accept={kind === "signature" ? "image/png" : "image/jpeg,image/png,application/pdf"}
+                disabled={uploading}
+                onChange={(e) => void onUpload(e.target.files?.[0] ?? null)}
+              />
+            </Field>
+          </FieldGrid>
+        </FormSection>
+      </div>
     </Page>
   );
 }
 
 export function Profile() {
   const { user, refresh, signOut } = useAuth();
+  const navigate = useNavigate();
   const [secret, setSecret] = useState<string>();
   const [otpauthUrl, setOtpauthUrl] = useState<string>();
   const [code, setCode] = useState("");
@@ -334,7 +347,9 @@ export function Profile() {
         ...(user?.passwordSet ? { password: currentPassword || password } : { confirmEmail }),
       });
       setMsg("Deletion requested. We’ll process it shortly.");
+      const role = user?.role;
       await signOut();
+      navigate(logoutPathFor(role), { replace: true });
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Could not request deletion.");
     }
@@ -370,112 +385,107 @@ export function Profile() {
   }
 
   return (
-    <Page title="You" intro="Security, signature and privacy for your account." narrow>
-      {msg && <p role="status" className="mb-4 text-sm text-green-800">{msg}</p>}
-      {err && <p role="alert" className="mb-4 text-sm font-medium text-red-700">{err}</p>}
+    <Page title="You" intro="Security, signature and privacy for your account." compact>
+      <div className="space-y-4">
+        {msg && <p role="status" className="text-sm text-green-800">{msg}</p>}
+        {err && <p role="alert" className="text-sm font-medium text-red-700">{err}</p>}
 
-      <section className="mb-8 space-y-3">
-        <h2 className="font-semibold">Two-factor authentication</h2>
-        <p className="text-sm text-charcoal-soft">
-          Required for admin and consultancy accounts. Students may enable it optionally.
-        </p>
-        {!secret ? (
-          <Button onClick={() => void begin2fa()}>Set up authenticator</Button>
-        ) : (
-          <form onSubmit={enable2fa} className="space-y-3">
-            <p className="break-all text-xs text-charcoal-soft">{otpauthUrl}</p>
-            <Field label="Code from authenticator">
-              <input className="input" value={code} onChange={(e) => setCode(e.target.value)} required pattern="\d{6}" />
-            </Field>
-            <Button type="submit">Enable 2FA</Button>
-          </form>
-        )}
-      </section>
-
-      <section className="mb-8 space-y-3">
-        <h2 className="font-semibold">Signature</h2>
-        <canvas
-          ref={canvasRef}
-          width={320}
-          height={120}
-          className="w-full max-w-sm touch-none rounded-xl border border-charcoal/15 bg-white"
-          onPointerDown={(e) => {
-            drawing.current = true;
-            const rect = e.currentTarget.getBoundingClientRect();
-            paint(e.clientX - rect.left, e.clientY - rect.top);
-          }}
-          onPointerMove={(e) => {
-            if (!drawing.current) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            paint(e.clientX - rect.left, e.clientY - rect.top);
-          }}
-          onPointerUp={() => {
-            drawing.current = false;
-            canvasRef.current?.getContext("2d")?.beginPath();
-          }}
-        />
-        <Button variant="secondary" onClick={() => void uploadSignature()}>
-          Save signature PNG
-        </Button>
-      </section>
-
-      <section className="mb-8 space-y-3">
-        <h2 className="font-semibold">{user?.passwordSet ? "Change password" : "Set password"}</h2>
-        <form onSubmit={changePassword} className="space-y-3">
-          {user?.passwordSet && (
-            <Field label="Current password">
-              <input
-                className="input"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-              />
-            </Field>
-          )}
-          <Field label="New password">
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={10}
-            />
-          </Field>
-          <Button type="submit">Save password</Button>
-        </form>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="font-semibold">Request account deletion</h2>
-        <form onSubmit={requestDeletion} className="space-y-3">
-          {user?.passwordSet ? (
-            <Field label="Confirm with password">
-              <input
-                className="input"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-              />
-            </Field>
+        <FormSection title="Two-factor authentication" description="Required for admin and consultancy accounts.">
+          {!secret ? (
+            <Button onClick={() => void begin2fa()}>Set up authenticator</Button>
           ) : (
-            <Field label="Type your email to confirm">
+            <form onSubmit={enable2fa} className="space-y-3">
+              <p className="break-all text-xs text-charcoal-soft">{otpauthUrl}</p>
+              <Field label="Code from authenticator">
+                <input className="input" value={code} onChange={(e) => setCode(e.target.value)} required pattern="\d{6}" />
+              </Field>
+              <Button type="submit">Enable 2FA</Button>
+            </form>
+          )}
+        </FormSection>
+
+        <FormSection title="Signature">
+          <canvas
+            ref={canvasRef}
+            width={320}
+            height={120}
+            className="w-full max-w-sm touch-none rounded-xl border border-charcoal/15 bg-white"
+            onPointerDown={(e) => {
+              drawing.current = true;
+              const rect = e.currentTarget.getBoundingClientRect();
+              paint(e.clientX - rect.left, e.clientY - rect.top);
+            }}
+            onPointerMove={(e) => {
+              if (!drawing.current) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              paint(e.clientX - rect.left, e.clientY - rect.top);
+            }}
+            onPointerUp={() => {
+              drawing.current = false;
+              canvasRef.current?.getContext("2d")?.beginPath();
+            }}
+          />
+          <Button variant="secondary" onClick={() => void uploadSignature()}>
+            Save signature PNG
+          </Button>
+        </FormSection>
+
+        <FormSection title={user?.passwordSet ? "Change password" : "Set password"}>
+          <form onSubmit={changePassword} className="space-y-3">
+            {user?.passwordSet && (
+              <Field label="Current password">
+                <input
+                  className="input"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                />
+              </Field>
+            )}
+            <Field label="New password">
               <input
                 className="input"
-                type="email"
-                value={confirmEmail}
-                onChange={(e) => setConfirmEmail(e.target.value)}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={10}
               />
             </Field>
-          )}
-          <Button type="submit" variant="secondary">
-            Request account deletion
-          </Button>
-        </form>
-      </section>
+            <Button type="submit">Save password</Button>
+          </form>
+        </FormSection>
+
+        <FormSection title="Request account deletion">
+          <form onSubmit={requestDeletion} className="space-y-3">
+            {user?.passwordSet ? (
+              <Field label="Confirm with password">
+                <input
+                  className="input"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                />
+              </Field>
+            ) : (
+              <Field label="Type your email to confirm">
+                <input
+                  className="input"
+                  type="email"
+                  value={confirmEmail}
+                  onChange={(e) => setConfirmEmail(e.target.value)}
+                  required
+                />
+              </Field>
+            )}
+            <Button type="submit" variant="secondary">
+              Request account deletion
+            </Button>
+          </form>
+        </FormSection>
+      </div>
     </Page>
   );
 }

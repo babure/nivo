@@ -1,37 +1,52 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { CARD_STATUSES, hasPermission, type Permission } from "@nivo/shared";
 import { Login } from "../AuthPages";
-import { Field, Page } from "../../components/Page";
+import { Field, FieldGrid, FormSection, Page } from "../../components/Page";
 import { Button } from "../../components/Button";
 import { PermissionGate } from "../../components/guards";
 import { WorkspaceShell } from "../../components/WorkspaceShell";
 import { api, ApiError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { logoutPathFor } from "../../lib/navigation";
 
 type AdminSection = { path: string; label: string; permission: Permission; description: string };
 
 export const ADMIN_SECTIONS: AdminSection[] = [
-  { path: "students", label: "Students", permission: "students:read", description: "Browse and manage students." },
-  { path: "approvals", label: "Approvals", permission: "approvals:decide", description: "Decide pending maker-checker requests." },
-  { path: "settings", label: "Settings", permission: "settings:links:edit", description: "Links, SIM rules and content settings." },
-  { path: "leads", label: "Leads", permission: "leads:read", description: "Accommodation and partner leads." },
-  { path: "reports", label: "Reports", permission: "audit:read", description: "Audit log and exports." },
+  { path: "students", label: "Students", permission: "students:read", description: "Browse and manage students" },
+  { path: "proofs", label: "Proofs", permission: "proofs:approve", description: "Approve completion uploads" },
+  { path: "approvals", label: "Approvals", permission: "approvals:decide", description: "Maker-checker queue" },
+  { path: "leads", label: "Leads", permission: "leads:read", description: "Accommodation enquiries" },
+  { path: "partners", label: "Partners", permission: "consultancies:manage", description: "Consultancies & codes" },
+  { path: "team", label: "Team", permission: "admins:manage", description: "Create admin logins" },
+  { path: "settings", label: "Settings", permission: "settings:links:edit", description: "Links & SIM rules" },
+  { path: "reports", label: "Reports", permission: "audit:read", description: "Audit log" },
 ];
 
 function AdminLayout() {
   const { user, ready, signOut } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const perms = user?.permissions ?? [];
   const visible = ADMIN_SECTIONS.filter((s) => hasPermission(perms, s.permission));
 
   if (!ready) return <p className="p-8 text-center text-sm text-charcoal-soft">Checking your session…</p>;
-  if (!user || user.role !== "admin") return <Navigate to="/admin/login" replace />;
+  if (!user || user.role !== "admin") {
+    return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
+  }
+
+  async function onLogout() {
+    const role = user?.role;
+    await signOut();
+    navigate(logoutPathFor(role), { replace: true });
+  }
 
   return (
     <WorkspaceShell
       brandHref="/admin/students"
       eyebrow="Admin"
       title="Admin"
+      mobileNav
       nav={visible.map((s) => ({
         to: `/admin/${s.path}`,
         label: s.label,
@@ -43,7 +58,7 @@ function AdminLayout() {
           <button
             type="button"
             className="text-sm font-medium text-charcoal-soft underline-offset-4 hover:text-charcoal hover:underline"
-            onClick={() => void signOut()}
+            onClick={() => void onLogout()}
           >
             Log out
           </button>
@@ -150,12 +165,12 @@ function StudentsPanel() {
   }
 
   return (
-    <Page title="Students" intro="Browse and manage student accounts.">
+    <Page title="Students" intro="Browse and manage student accounts." wide compact>
       {error && <p role="alert" className="mb-3 text-sm font-medium text-red-700">{error}</p>}
       {message && <p role="status" className="mb-3 text-sm font-medium text-orange-dark">{message}</p>}
       <div className="overflow-x-auto rounded-2xl border border-charcoal/10 bg-white">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-beige/50 text-xs uppercase tracking-wide text-charcoal-soft">
+          <thead className="bg-mist/80 text-xs uppercase tracking-wide text-charcoal-soft">
             <tr>
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Country</th>
@@ -295,7 +310,12 @@ function LeadsPanel() {
   }
 
   return (
-    <Page title="Leads" intro="Accommodation requests from students.">
+    <Page title="Leads" intro="Accommodation requests from students." wide compact>
+      <div className="mb-3">
+        <a className="btn-secondary text-sm no-underline" href={`${api.baseUrl}/v1/admin/exports/leads.csv`}>
+          Export CSV
+        </a>
+      </div>
       {error && <p role="alert" className="mb-3 text-sm font-medium text-red-700">{error}</p>}
       {message && <p role="status" className="mb-3 text-sm font-medium text-orange-dark">{message}</p>}
       <div className="space-y-4">
@@ -311,7 +331,7 @@ function LeadsPanel() {
                 </p>
                 {lead.notes && <p className="mt-1 text-sm">{lead.notes}</p>}
               </div>
-              <span className="rounded-full bg-beige px-3 py-1 text-xs font-medium capitalize">{lead.status}</span>
+              <span className="rounded-full bg-mist px-3 py-1 text-xs font-medium capitalize">{lead.status}</span>
             </div>
             {canUpdate && (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -392,30 +412,304 @@ function SettingsPanel() {
   }
 
   return (
-    <Page title="Settings" intro="Partner links and SIM unlock rules.">
+    <Page title="Settings" intro="Partner links and SIM unlock rules." compact>
+      <div className="space-y-4">
+        {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
+        {message && <p role="status" className="text-sm font-medium text-orange-dark">{message}</p>}
+        <form onSubmit={saveLinks}>
+          <FormSection title="Partner links" description="Editable without a new release.">
+            <FieldGrid>
+              {(["expatrio", "vodafone", "swarajya"] as const).map((key) => (
+                <Field key={key} label={key} className="sm:col-span-2">
+                  <input
+                    className="input"
+                    value={links[key]}
+                    onChange={(e) => setLinks((l) => ({ ...l, [key]: e.target.value }))}
+                    required
+                  />
+                </Field>
+              ))}
+            </FieldGrid>
+            <Button type="submit">Save links</Button>
+          </FormSection>
+        </form>
+        <form onSubmit={saveSim}>
+          <FormSection title="SIM unlock" description="Cards that must be Completed before SIM unlocks.">
+            <Field label="Required card keys" hint="Comma-separated. Default: blocked_account">
+              <input className="input" value={simRules} onChange={(e) => setSimRules(e.target.value)} />
+            </Field>
+            <Button type="submit">Save SIM rules</Button>
+          </FormSection>
+        </form>
+      </div>
+    </Page>
+  );
+}
+
+function TeamPanel() {
+  const [admins, setAdmins] = useState<{ id: string; email: string; fullName: string; totpEnabled: boolean }[]>([]);
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string>();
+  const [message, setMessage] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get<{ admins: typeof admins }>("/v1/admin/admins");
+      setAdmins(res.admins);
+      setError(undefined);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load admins.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function onCreate(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api.post("/v1/admin/admins", { email, fullName, password });
+      setMessage(`Admin ${email} created.`);
+      setEmail("");
+      setFullName("");
+      setPassword("");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not create admin.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Page title="Team" intro="Create another admin login. First admin is bootstrapped on API startup." compact>
+      <div className="space-y-4">
+        {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
+        {message && <p role="status" className="text-sm font-medium text-orange-dark">{message}</p>}
+        <FormSection title="Admins">
+          <ul className="space-y-2 text-sm">
+            {admins.map((a) => (
+              <li key={a.id} className="flex flex-wrap justify-between gap-2 rounded-xl bg-mist/60 px-3 py-2.5">
+                <span>
+                  <span className="font-medium">{a.fullName}</span>
+                  <span className="text-charcoal-soft"> · {a.email}</span>
+                </span>
+                <span className="text-xs text-charcoal-soft">{a.totpEnabled ? "2FA on" : "2FA off"}</span>
+              </li>
+            ))}
+            {admins.length === 0 && <li className="text-charcoal-soft">No admins listed.</li>}
+          </ul>
+        </FormSection>
+        <form onSubmit={onCreate}>
+          <FormSection title="Add admin" description="They can sign in at /admin/login.">
+            <FieldGrid>
+              <Field label="Full name">
+                <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} required minLength={2} />
+              </Field>
+              <Field label="Email">
+                <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              </Field>
+              <Field label="Temporary password" hint="Min 10 characters" className="sm:col-span-2">
+                <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} />
+              </Field>
+            </FieldGrid>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Creating…" : "Create admin"}
+            </Button>
+          </FormSection>
+        </form>
+      </div>
+    </Page>
+  );
+}
+
+function PartnersPanel() {
+  const [rows, setRows] = useState<{ id: string; name: string; code: string; link: string }[]>([]);
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [managerEmail, setManagerEmail] = useState("");
+  const [managerPassword, setManagerPassword] = useState("");
+  const [managerName, setManagerName] = useState("");
+  const [error, setError] = useState<string>();
+  const [message, setMessage] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get<{ consultancies: typeof rows }>("/v1/admin/consultancies");
+      setRows(res.consultancies);
+      setError(undefined);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load consultancies.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function onCreate(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    try {
+      const body: Record<string, string> = { name, code };
+      if (managerEmail.trim()) {
+        body.managerEmail = managerEmail.trim();
+        body.managerPassword = managerPassword;
+        if (managerName.trim()) body.managerName = managerName.trim();
+      }
+      const created = await api.post<{ code: string; link: string }>("/v1/admin/consultancies", body);
+      setMessage(`Created ${created.code} — join link ${created.link}`);
+      setName("");
+      setCode("");
+      setManagerEmail("");
+      setManagerPassword("");
+      setManagerName("");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not create consultancy.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Page title="Partners" intro="Add a consultancy with a referral code students use at /r/CODE." compact wide>
+      <div className="space-y-4">
+        {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
+        {message && <p role="status" className="text-sm font-medium text-orange-dark">{message}</p>}
+        <FormSection title="Consultancies">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase text-charcoal-soft">
+                <tr>
+                  <th className="py-2 pr-3">Name</th>
+                  <th className="py-2 pr-3">Code</th>
+                  <th className="py-2">Join link</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-t border-charcoal/10">
+                    <td className="py-2 pr-3 font-medium">{r.name}</td>
+                    <td className="py-2 pr-3 font-mono text-xs">{r.code}</td>
+                    <td className="py-2 font-mono text-xs">{r.link}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {rows.length === 0 && <p className="text-sm text-charcoal-soft">No consultancies yet.</p>}
+          </div>
+        </FormSection>
+        <form onSubmit={onCreate}>
+          <FormSection title="Add consultancy" description="Optional manager login for the consultancy portal.">
+            <FieldGrid>
+              <Field label="Organisation name">
+                <input className="input" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
+              </Field>
+              <Field label="Referral code" hint="Letters/numbers, stored uppercase">
+                <input className="input" value={code} onChange={(e) => setCode(e.target.value)} required minLength={4} />
+              </Field>
+              <Field label="Manager name (optional)">
+                <input className="input" value={managerName} onChange={(e) => setManagerName(e.target.value)} />
+              </Field>
+              <Field label="Manager email (optional)">
+                <input className="input" type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} />
+              </Field>
+              <Field label="Manager password" hint="Required if email is set" className="sm:col-span-2">
+                <input
+                  className="input"
+                  type="password"
+                  value={managerPassword}
+                  onChange={(e) => setManagerPassword(e.target.value)}
+                  minLength={10}
+                  required={Boolean(managerEmail.trim())}
+                />
+              </Field>
+            </FieldGrid>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Creating…" : "Create consultancy"}
+            </Button>
+          </FormSection>
+        </form>
+      </div>
+    </Page>
+  );
+}
+
+function ProofsPanel() {
+  const [proofs, setProofs] = useState<
+    { id: string; userId: string; cardKey: string; status: string; fileId: string; createdAt: string }[]
+  >([]);
+  const [error, setError] = useState<string>();
+  const [message, setMessage] = useState<string>();
+  const [busyId, setBusyId] = useState<string>();
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get<{ proofs: typeof proofs }>("/v1/admin/proofs?status=pending");
+      setProofs(res.proofs);
+      setError(undefined);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load proofs.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function decide(id: string, decision: "approved" | "rejected") {
+    setBusyId(id);
+    setError(undefined);
+    try {
+      await api.post(`/v1/admin/proofs/${id}/decide`, { decision });
+      setMessage(`Proof ${decision}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Decision failed.");
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
+  return (
+    <Page title="Proofs" intro="Student completion uploads waiting for review." compact>
       {error && <p role="alert" className="mb-3 text-sm font-medium text-red-700">{error}</p>}
       {message && <p role="status" className="mb-3 text-sm font-medium text-orange-dark">{message}</p>}
-      <form onSubmit={saveLinks} className="surface mb-6 space-y-3">
-        <h2 className="font-semibold">Partner links</h2>
-        {(["expatrio", "vodafone", "swarajya"] as const).map((key) => (
-          <Field key={key} label={key}>
-            <input
-              className="input"
-              value={links[key]}
-              onChange={(e) => setLinks((l) => ({ ...l, [key]: e.target.value }))}
-              required
-            />
-          </Field>
+      <div className="space-y-3">
+        {proofs.map((p) => (
+          <article key={p.id} className="surface flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm">
+              <p className="font-semibold">{p.cardKey}</p>
+              <p className="text-charcoal-soft">
+                Student {p.userId.slice(0, 8)}… · {new Date(p.createdAt).toLocaleString()}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" disabled={busyId === p.id} onClick={() => void decide(p.id, "approved")}>
+                Approve
+              </Button>
+              <Button
+                type="button"
+                className="btn-secondary"
+                disabled={busyId === p.id}
+                onClick={() => void decide(p.id, "rejected")}
+              >
+                Reject
+              </Button>
+            </div>
+          </article>
         ))}
-        <Button type="submit">Save links</Button>
-      </form>
-      <form onSubmit={saveSim} className="surface space-y-3">
-        <h2 className="font-semibold">SIM unlock required cards</h2>
-        <Field label="Comma-separated card keys" hint="Default: blocked_account">
-          <input className="input" value={simRules} onChange={(e) => setSimRules(e.target.value)} />
-        </Field>
-        <Button type="submit">Save SIM rules</Button>
-      </form>
+        {proofs.length === 0 && <p className="text-sm text-charcoal-soft">No pending proofs.</p>}
+      </div>
     </Page>
   );
 }
@@ -462,7 +756,7 @@ function ApprovalsPanel() {
   }
 
   return (
-    <Page title="Approvals" intro="Maker-checker queue for sensitive admin actions.">
+    <Page title="Approvals" intro="Maker-checker queue for sensitive admin actions." compact>
       {error && <p role="alert" className="mb-3 text-sm font-medium text-red-700">{error}</p>}
       {message && <p role="status" className="mb-3 text-sm font-medium text-orange-dark">{message}</p>}
       <div className="space-y-3">
@@ -519,7 +813,7 @@ function ReportsPanel() {
   }, []);
 
   return (
-    <Page title="Reports" intro="Recent audit events.">
+    <Page title="Reports" intro="Recent audit events." wide compact>
       {error && <p role="alert" className="mb-3 text-sm font-medium text-red-700">{error}</p>}
       {chainValid !== null && (
         <p className="mb-3 text-sm">
@@ -531,7 +825,7 @@ function ReportsPanel() {
       )}
       <div className="overflow-x-auto rounded-2xl border border-charcoal/10 bg-white">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-beige/50 text-xs uppercase text-charcoal-soft">
+          <thead className="bg-mist/80 text-xs uppercase text-charcoal-soft">
             <tr>
               <th className="px-3 py-2">When</th>
               <th className="px-3 py-2">Action</th>
@@ -558,12 +852,20 @@ function ReportsPanel() {
   );
 }
 
+function AdminLoginPage() {
+  const { user, ready } = useAuth();
+  if (ready && user?.role === "admin") {
+    return <Navigate to="/admin/students" replace />;
+  }
+  return <Login kind="admin" />;
+}
+
 export default function AdminRoutes() {
   const { user } = useAuth();
   const first = ADMIN_SECTIONS.find((s) => hasPermission(user?.permissions ?? [], s.permission));
   return (
     <Routes>
-      <Route path="login" element={<Login kind="admin" />} />
+      <Route path="login" element={<AdminLoginPage />} />
       <Route element={<AdminLayout />}>
         <Route index element={<Navigate to={first ? first.path : "students"} replace />} />
         <Route
@@ -571,6 +873,14 @@ export default function AdminRoutes() {
           element={
             <PermissionGate permission="students:read">
               <StudentsPanel />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="proofs"
+          element={
+            <PermissionGate permission="proofs:approve">
+              <ProofsPanel />
             </PermissionGate>
           }
         />
@@ -595,6 +905,22 @@ export default function AdminRoutes() {
           element={
             <PermissionGate permission="leads:read">
               <LeadsPanel />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="partners"
+          element={
+            <PermissionGate permission="consultancies:manage">
+              <PartnersPanel />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="team"
+          element={
+            <PermissionGate permission="admins:manage">
+              <TeamPanel />
             </PermissionGate>
           }
         />

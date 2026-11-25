@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Field } from "../components/Page";
 import { Button, LinkButton } from "../components/Button";
 import { useAuth } from "../lib/auth";
+import { homePathFor } from "../lib/navigation";
 
 const PATH_ITEMS = [
   {
@@ -72,15 +73,7 @@ function scrollToHash(hash: string) {
 export default function Home() {
   const { user } = useAuth();
   const location = useLocation();
-  const ctaTo = user
-    ? user.role === "admin"
-      ? "/admin/students"
-      : user.role === "consultancy"
-        ? "/consultancy/dashboard"
-        : user.paymentStatus === "paid"
-          ? "/dashboard"
-          : "/pay"
-    : "/register";
+  const ctaTo = user ? homePathFor(user) : "/register";
   const ctaLabel = user
     ? user.role === "admin" || user.role === "consultancy"
       ? "Open workspace"

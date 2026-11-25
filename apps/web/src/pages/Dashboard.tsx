@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { CardStatus } from "@nivo/shared";
 import { DashboardCard } from "../components/DashboardCard";
 import { NextStep } from "../components/Page";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, uploadFile } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
 type CardView = {
@@ -72,6 +72,27 @@ export default function Dashboard() {
   const [error, setError] = useState<string>();
   const [banner, setBanner] = useState<string>();
   const [notifyMsg, setNotifyMsg] = useState<string>();
+  const [proofBusy, setProofBusy] = useState<string>();
+
+  async function reloadCards() {
+    const res = await api.get<{ cards: CardView[] }>("/v1/cards");
+    setCards(res.cards);
+  }
+
+  async function uploadProof(cardKey: string, file: File | null) {
+    if (!file) return;
+    setProofBusy(cardKey);
+    setNotifyMsg(undefined);
+    try {
+      await uploadFile(`/v1/cards/${cardKey}/proof`, file);
+      setNotifyMsg("Proof uploaded — an admin will review it.");
+      await reloadCards();
+    } catch (err) {
+      setNotifyMsg(err instanceof ApiError ? err.message : "Could not upload proof.");
+    } finally {
+      setProofBusy(undefined);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -132,13 +153,13 @@ export default function Dashboard() {
   const next = cards.find((c) => c.status === "available" || c.status === "in_progress");
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 py-6 sm:px-6 sm:py-10">
+    <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6 sm:py-6">
       <JourneyStepper paid={paid} identityComplete={identityComplete} />
 
-      <h1 className="font-display text-2xl font-semibold tracking-tight text-charcoal sm:text-[1.75rem]">
+      <h1 className="font-display text-xl font-semibold tracking-tight text-charcoal sm:text-2xl">
         {firstName ? `Hi ${firstName}` : "Your path"}
       </h1>
-      <p className="mt-1.5 text-sm leading-relaxed text-charcoal-soft">
+      <p className="mt-1 text-sm leading-relaxed text-charcoal-soft">
         {!paid
           ? "Activate once, then follow your checklist."
           : !identityComplete
@@ -165,7 +186,7 @@ export default function Dashboard() {
       )}
 
       {loaded && !paid && (
-        <div className="mt-8">
+        <div className="mt-5">
           <NextStep
             title="Activate your account"
             body="Pay the one-time NIVO fee to unlock your arrival checklist. Stripe may show a local currency."
@@ -179,7 +200,7 @@ export default function Dashboard() {
       )}
 
       {loaded && paid && !identityComplete && (
-        <div className="mt-8">
+        <div className="mt-5">
           <NextStep
             title="Finish your details"
             body="Encrypted identity onboarding — needed before blocked account and housing unlock."
@@ -192,8 +213,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      <section className="mt-10" aria-labelledby="checklist-title">
-        <div className="mb-2 flex items-baseline justify-between gap-3">
+      <section className="mt-6 rounded-2xl border border-charcoal/10 bg-white px-4 sm:px-5" aria-labelledby="checklist-title">
+        <div className="flex items-baseline justify-between gap-3 border-b border-charcoal/10 py-3">
           <h2 id="checklist-title" className="font-display text-sm font-semibold text-charcoal">
             Checklist
           </h2>
@@ -201,7 +222,7 @@ export default function Dashboard() {
             Papers
           </Link>
         </div>
-        <div className="border-t border-charcoal/10">
+        <div>
           {cards.map((c, i) => (
             <DashboardCard
               key={c.key}
@@ -217,6 +238,24 @@ export default function Dashboard() {
               }
               status={c.status}
               to={hrefFor(c.key)}
+              footer={
+                (c.key === "blocked_account" || c.key === "sim") &&
+                (c.status === "available" || c.status === "in_progress") ? (
+                  <label className="mt-3 block text-xs text-charcoal-soft">
+                    Upload completion proof (PDF/JPG/PNG)
+                    <input
+                      type="file"
+                      className="mt-1 block w-full text-xs"
+                      accept="image/jpeg,image/png,application/pdf"
+                      disabled={proofBusy === c.key}
+                      onChange={(e) => {
+                        void uploadProof(c.key, e.target.files?.[0] ?? null);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                ) : null
+              }
               onOpen={
                 c.key === "blocked_account" || c.key === "sim"
                   ? () => {
@@ -228,8 +267,7 @@ export default function Dashboard() {
                       );
                       void api
                         .post(`/v1/cards/${c.key}/status`, { status: "in_progress" })
-                        .then(() => api.get<{ cards: CardView[] }>("/v1/cards"))
-                        .then((res) => setCards(res.cards))
+                        .then(() => reloadCards())
                         .catch(() => undefined);
                     }
                   : c.comingSoon

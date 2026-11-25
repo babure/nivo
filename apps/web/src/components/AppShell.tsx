@@ -1,5 +1,6 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { logoutPathFor } from "../lib/navigation";
 import { WorkspaceShell } from "./WorkspaceShell";
 
 const NAV = [
@@ -11,7 +12,14 @@ const NAV = [
 
 export function AppShell() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const firstName = user?.fullName?.split(/\s+/)[0];
+
+  async function onLogout() {
+    const role = user?.role;
+    await signOut();
+    navigate(logoutPathFor(role), { replace: true });
+  }
 
   return (
     <WorkspaceShell
@@ -46,7 +54,7 @@ export function AppShell() {
           <button
             type="button"
             className="text-sm font-medium text-charcoal-soft underline-offset-4 hover:text-charcoal hover:underline"
-            onClick={() => void signOut()}
+            onClick={() => void onLogout()}
           >
             Log out
           </button>

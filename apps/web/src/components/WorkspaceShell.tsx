@@ -32,14 +32,14 @@ export function WorkspaceShell({
   return (
     <div className="min-h-screen bg-paper text-charcoal">
       <div className="mx-auto flex min-h-screen max-w-shell">
-        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-charcoal/10 bg-paper px-3 py-6 md:flex">
+        <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-charcoal/10 bg-paper px-2.5 py-5 md:flex">
           <NavLink
             to={brandHref}
-            className="font-display mb-1 px-3 text-lg font-bold tracking-[0.18em] text-orange no-underline"
+            className="font-display mb-0.5 px-3 text-lg font-bold tracking-[0.18em] text-orange no-underline"
           >
             {brandLabel}
           </NavLink>
-          <p className="mb-8 px-3 text-xs text-charcoal-soft">{eyebrow}</p>
+          <p className="mb-5 px-3 text-xs text-charcoal-soft">{eyebrow}</p>
           <nav aria-label={title} className="flex flex-1 flex-col gap-1">
             {nav.map((n) => (
               <NavLink
@@ -76,16 +76,16 @@ export function WorkspaceShell({
           {mobileNav && (
             <nav
               aria-label={`${title} mobile`}
-              className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t border-charcoal/10 bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur md:hidden"
+              className="fixed inset-x-0 bottom-0 z-10 flex gap-1 overflow-x-auto border-t border-charcoal/10 bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur md:hidden"
             >
-              {nav.slice(0, 4).map((n) => (
+              {nav.map((n) => (
                 <NavLink
                   key={n.to}
                   to={n.to}
                   end={n.end}
                   className={({ isActive }) =>
                     [
-                      "flex min-h-tap flex-col items-center justify-center rounded-lg px-1 text-[11px] font-semibold no-underline",
+                      "flex min-h-tap min-w-[4.5rem] shrink-0 flex-col items-center justify-center rounded-lg px-2 text-[11px] font-semibold no-underline",
                       isActive ? "text-orange-dark" : "text-charcoal-soft",
                     ].join(" ")
                   }

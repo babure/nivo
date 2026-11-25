@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { homePathFor, logoutPathFor } from "../lib/navigation";
 
 const PUBLIC_NAV = [
   { hash: "#path", label: "The path" },
@@ -86,22 +87,17 @@ export function Header() {
           )}
           {user ? (
             <div className="ml-1 flex items-center gap-2">
-              <NavLink
-                to={
-                  isAdmin
-                    ? "/admin/students"
-                    : isConsultancy
-                      ? "/consultancy/dashboard"
-                      : user.paymentStatus === "paid"
-                        ? "/dashboard"
-                        : "/pay"
-                }
-                className={link}
-                onClick={() => setOpen(false)}
-              >
+              <NavLink to={homePathFor(user)} className={link} onClick={() => setOpen(false)}>
                 Open app
               </NavLink>
-              <button type="button" className="btn-secondary" onClick={() => void signOut()}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  const role = user.role;
+                  void signOut().then(() => navigate(logoutPathFor(role), { replace: true }));
+                }}
+              >
                 Log out
               </button>
             </div>

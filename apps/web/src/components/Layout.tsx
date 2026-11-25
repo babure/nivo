@@ -1,5 +1,11 @@
-import { Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import {
+  homePathFor,
+  isAdminAppPath,
+  isConsultancyAppPath,
+  isStudentAppPath,
+} from "../lib/navigation";
 import { Header } from "./Header";
 import { Footer } from "./Footer";
 import { CookieBanner } from "./CookieBanner";
@@ -20,11 +26,14 @@ function MarketingLayout() {
 }
 
 /**
- * Students → app shell. Admin/consultancy → bare outlet (their own workspace shells).
- * Guests → marketing chrome.
+ * Pick chrome by route + role.
+ * Students only get AppShell on student app routes (not home/login/legal).
+ * Staff only get bare outlet on their portals; elsewhere use marketing chrome.
+ * Wrong-area URLs bounce to that role's home.
  */
 export function Layout() {
   const { user, ready } = useAuth();
+  const { pathname } = useLocation();
 
   if (!ready) {
     return (
@@ -34,7 +43,27 @@ export function Layout() {
     );
   }
 
-  if (user?.role === "student") {
+  const studentArea = isStudentAppPath(pathname);
+  const adminArea = isAdminAppPath(pathname);
+  const consArea = isConsultancyAppPath(pathname);
+  const adminLogin = pathname === "/admin/login" || pathname.startsWith("/admin/login/");
+
+  if (user?.role === "admin" && studentArea) {
+    return <Navigate to={homePathFor(user)} replace />;
+  }
+  if (user?.role === "consultancy" && studentArea) {
+    return <Navigate to={homePathFor(user)} replace />;
+  }
+  if (user?.role === "student" && (adminArea || consArea) && !adminLogin) {
+    return <Navigate to={homePathFor(user)} replace />;
+  }
+  if (user?.role === "admin" && consArea) {
+    // Admins may open consultancy dashboard; allow.
+  } else if (user?.role === "consultancy" && adminArea && !adminLogin) {
+    return <Navigate to={homePathFor(user)} replace />;
+  }
+
+  if (user?.role === "student" && studentArea) {
     return (
       <>
         <AppShell />
@@ -43,8 +72,25 @@ export function Layout() {
     );
   }
 
-  // Staff portals render their own WorkspaceShell; avoid double header/footer.
-  if (user?.role === "admin" || user?.role === "consultancy") {
+  if (user?.role === "admin" && adminArea && !adminLogin) {
+    return (
+      <>
+        <Outlet />
+        <CookieBanner />
+      </>
+    );
+  }
+
+  if (user?.role === "consultancy" && consArea) {
+    return (
+      <>
+        <Outlet />
+        <CookieBanner />
+      </>
+    );
+  }
+
+  if (user?.role === "admin" && consArea) {
     return (
       <>
         <Outlet />

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Page } from "../components/Page";
 import { WorkspaceShell } from "../components/WorkspaceShell";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { logoutPathFor } from "../lib/navigation";
 
 type Dashboard = {
   counts: { registered: number; verified: number; paid: number; identity: number };
@@ -20,6 +21,14 @@ type Dashboard = {
 
 function ConsultancyLayout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function onLogout() {
+    const role = user?.role;
+    await signOut();
+    navigate(logoutPathFor(role), { replace: true });
+  }
+
   return (
     <WorkspaceShell
       brandHref="/consultancy/dashboard"
@@ -39,7 +48,7 @@ function ConsultancyLayout({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             className="text-sm font-medium text-charcoal-soft underline-offset-4 hover:text-charcoal hover:underline"
-            onClick={() => void signOut()}
+            onClick={() => void onLogout()}
           >
             Log out
           </button>
@@ -67,6 +76,8 @@ function ConsultancyDashboard() {
       <Page
         title="Referrals"
         intro="Students attributed to your organisation. Contact details only show when the student consented."
+        wide
+        compact
         actions={
           <button
             type="button"
@@ -162,9 +173,10 @@ function ConsultancyDashboard() {
 
 export default function ConsultancyRoutes() {
   const { user, ready } = useAuth();
+  const location = useLocation();
   if (!ready) return <p className="p-8 text-center text-sm text-charcoal-soft">Checking your session…</p>;
   if (!user || (user.role !== "consultancy" && user.role !== "admin")) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
   return (
     <Routes>

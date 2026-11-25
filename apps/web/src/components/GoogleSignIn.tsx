@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { resolvePostLoginPath } from "../lib/navigation";
 
 type Props = {
   next?: string;
@@ -91,18 +92,7 @@ export function GoogleSignInButton({
         });
         const me = await refresh();
         if (!me) throw new ApiError(401, "UNAUTHORIZED", "Could not load your session.");
-        const dest =
-          next ??
-          (me.role === "admin"
-            ? "/admin/students"
-            : me.role === "consultancy"
-              ? "/consultancy/dashboard"
-              : me.paymentStatus !== "paid"
-                ? "/pay"
-                : me.identityComplete
-                  ? "/dashboard"
-                  : "/onboarding/identity");
-        navigate(dest, { replace: true });
+        navigate(resolvePostLoginPath(me, next), { replace: true });
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Google sign-in failed.");
       } finally {

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { CARD_STATUSES, canApproveRequest } from "@nivo/shared";
 import { z } from "zod";
@@ -5,6 +6,8 @@ import { csvRow } from "../../lib/csv.js";
 import { AppError, parseStrict } from "../../lib/errors.js";
 import { isStepUpFresh } from "../../lib/step-up.js";
 import { requireAuthContext, requireStaffMfa } from "../../plugins/auth.js";
+import { createArgon2Hasher } from "../auth/service.js";
+import { UniqueViolationError, type UserRecord } from "../../repositories/types.js";
 import { ACCOMMODATION_NOTIFY_SETTING } from "../accommodation/service.js";
 import { PARTNER_LINKS_SETTING, partnerLinksSchema } from "../partners/routes.js";
 import { DEFAULT_SIM_REQUIRED, SIM_RULES_SETTING } from "../cards/service.js";
@@ -41,7 +44,11 @@ const notifyEmailBody = z.object({
 });
 
 function assertStepUp(sessionId: string) {
-  if (!isStepUpFresh(sessionId) && process.env.NODE_ENV !== "test") {
+  if (
+    !isStepUpFresh(sessionId) &&
+    process.env.NODE_ENV !== "test" &&
+    process.env.ALLOW_STAFF_WITHOUT_MFA !== "true"
+  ) {
     throw new AppError("STEP_UP_REQUIRED", "Re-confirm with your two-factor code.");
   }
 }
@@ -423,4 +430,167 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     reply.header("Content-Disposition", 'attachment; filename="leads.csv"');
     return reply.send(rows.join("\n"));
   });
+
+  const createAdminBody = z.object({
+    email: z.string().email().max(254),
+    fullName: z.string().trim().min(2).max(80),
+    password: z.string().min(10).max(128),
+  });
+
+  app.get("/v1/admin/admins", { preHandler: requirePermission("admins:manage") }, async () => {
+    const users = await repos.users.list();
+    return {
+      admins: users
+        .filter((u) => u.role === "super_admin" && !u.deletedAt)
+        .map((u) => ({
+          id: u.id,
+          email: u.email,
+          fullName: u.fullName,
+          totpEnabled: u.totpSecret !== null,
+          createdAt: u.createdAt,
+        })),
+    };
+  });
+
+  app.post("/v1/admin/admins", { preHandler: requirePermission("admins:manage") }, async (req, reply) => {
+    const body = parseStrict(createAdminBody, req.body);
+    const ctx = requireAuthContext(req);
+    assertStepUp(ctx.sessionId);
+
+    const email = body.email.trim().toLowerCase();
+    if (await repos.users.findByEmail(email)) {
+      throw new AppError("CONFLICT", "An account with that email already exists.");
+    }
+
+    const hasher = createArgon2Hasher({
+      memoryCost: app.config.ARGON2_MEMORY_KIB,
+      timeCost: app.config.ARGON2_TIME_COST,
+    });
+    const now = new Date();
+    const user: UserRecord = {
+      id: randomUUID(),
+      email,
+      fullName: body.fullName,
+      phone: "+49000000000",
+      country: "DE",
+      intake: "ops",
+      passwordHash: await hasher.hash(body.password),
+      emailVerifiedAt: now,
+      role: "super_admin",
+      googleSub: null,
+      avatarUrl: null,
+      passwordSet: true,
+      totpSecret: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      createdAt: now,
+      deletedAt: null,
+    };
+    try {
+      await repos.users.create(user);
+    } catch (err) {
+      if (err instanceof UniqueViolationError) {
+        throw new AppError("CONFLICT", "An account with that email already exists.");
+      }
+      throw err;
+    }
+    await audit.append({
+      actorId: ctx.user.id,
+      action: "admins.created",
+      entityType: "user",
+      entityId: user.id,
+      meta: { email },
+    });
+    return reply.code(201).send({ id: user.id, email: user.email, fullName: user.fullName });
+  });
+
+  const createConsultancyBody = z.object({
+    name: z.string().trim().min(2).max(160),
+    code: z
+      .string()
+      .trim()
+      .min(4)
+      .max(32)
+      .regex(/^[A-Za-z0-9_-]+$/, "Use letters, numbers, underscore or hyphen only."),
+    managerEmail: z.string().email().max(254).optional(),
+    managerPassword: z.string().min(10).max(128).optional(),
+    managerName: z.string().trim().min(2).max(80).optional(),
+  });
+
+  app.get("/v1/admin/consultancies", { preHandler: requirePermission("consultancies:manage") }, async () => {
+    const list = await repos.consultancies.list();
+    return {
+      consultancies: list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        code: c.referralCode,
+        link: `/r/${c.referralCode}`,
+      })),
+    };
+  });
+
+  app.post(
+    "/v1/admin/consultancies",
+    { preHandler: requirePermission("consultancies:manage") },
+    async (req, reply) => {
+      const body = parseStrict(createConsultancyBody, req.body);
+      const ctx = requireAuthContext(req);
+      assertStepUp(ctx.sessionId);
+
+      const referralCode = body.code.toUpperCase();
+      if (await repos.consultancies.findByReferralCode(referralCode)) {
+        throw new AppError("CONFLICT", "That referral code is already in use.");
+      }
+
+      const created = await app.services.consultancy.create(body.name, referralCode);
+      let manager: { id: string; email: string } | undefined;
+
+      if (body.managerEmail) {
+        if (!body.managerPassword) {
+          throw new AppError("VALIDATION_FAILED", "Manager password is required when creating a login.");
+        }
+        const email = body.managerEmail.trim().toLowerCase();
+        if (await repos.users.findByEmail(email)) {
+          throw new AppError("CONFLICT", "A user with that manager email already exists.");
+        }
+        const hasher = createArgon2Hasher({
+          memoryCost: app.config.ARGON2_MEMORY_KIB,
+          timeCost: app.config.ARGON2_TIME_COST,
+        });
+        const now = new Date();
+        const user: UserRecord = {
+          id: randomUUID(),
+          email,
+          fullName: body.managerName?.trim() || `${body.name} Manager`,
+          phone: "+49000000000",
+          country: "DE",
+          intake: "consultancy",
+          passwordHash: await hasher.hash(body.managerPassword),
+          emailVerifiedAt: now,
+          role: "consultancy",
+          googleSub: null,
+          avatarUrl: null,
+          passwordSet: true,
+          totpSecret: null,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          createdAt: now,
+          deletedAt: null,
+        };
+        await repos.users.create(user);
+        await repos.consultancies.addMember(user.id, created.id, "owner");
+        manager = { id: user.id, email: user.email };
+      }
+
+      await audit.append({
+        actorId: ctx.user.id,
+        action: "consultancies.created",
+        entityType: "consultancy",
+        entityId: created.id,
+        meta: { code: created.code, managerId: manager?.id },
+      });
+
+      return reply.code(201).send({ ...created, manager });
+    },
+  );
 }

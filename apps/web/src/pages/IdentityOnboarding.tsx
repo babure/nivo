@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { identitySchema } from "@nivo/shared";
-import { Field, Page } from "../components/Page";
+import { Field, FieldGrid, FormSection, Page } from "../components/Page";
 import { Button } from "../components/Button";
 import { OnboardingStepper } from "../components/OnboardingStepper";
 import { api, ApiError } from "../lib/api";
 
-const STEPS = ["Personal", "Family", "Address", "Passport & consent"];
+const STEPS = ["Personal", "Family", "Address", "Passport"];
 
 type Addr = { street: string; houseNumber: string; city: string; postalCode: string; country: string };
 const emptyAddr: Addr = { street: "", houseNumber: "", city: "", postalCode: "", country: "" };
@@ -94,27 +94,33 @@ export default function IdentityOnboarding() {
   );
 
   const addressFields = (which: "currentAddress" | "permanentAddress", title: string, disabled = false) => (
-    <fieldset className="space-y-3" disabled={disabled}>
-      <legend className="mb-2 font-semibold">{title}</legend>
-      {(
-        [
-          ["Street", "street"],
-          ["House number", "houseNumber"],
-          ["City", "city"],
-          ["Postal code", "postalCode"],
-          ["Country", "country"],
-        ] as [string, keyof Addr][]
-      ).map(([label, k]) => (
-        <Field key={k} label={label} error={errors[`${which}.${k}`]}>
-          <input className="input" value={form[which][k]} onChange={(e) => setAddr(which, k, e.target.value)} />
-        </Field>
-      ))}
+    <fieldset disabled={disabled} className="min-w-0">
+      <legend className="mb-2 text-sm font-semibold text-charcoal">{title}</legend>
+      <FieldGrid>
+        {(
+          [
+            ["Street", "street"],
+            ["House number", "houseNumber"],
+            ["City", "city"],
+            ["Postal code", "postalCode"],
+            ["Country", "country"],
+          ] as [string, keyof Addr][]
+        ).map(([label, k]) => (
+          <Field key={k} label={label} error={errors[`${which}.${k}`]} className={k === "street" ? "sm:col-span-2" : undefined}>
+            <input className="input" value={form[which][k]} onChange={(e) => setAddr(which, k, e.target.value)} />
+          </Field>
+        ))}
+      </FieldGrid>
     </fieldset>
   );
 
   return (
-    <Page title="Verify your identity" intro="Your details are encrypted and only used for your services." narrow>
-      <div className="space-y-6">
+    <Page
+      title="Your details"
+      intro="Encrypted and only used for your NIVO services."
+      compact
+    >
+      <div className="space-y-4">
         <OnboardingStepper steps={STEPS} current={step} />
         <form
           className="space-y-4"
@@ -125,37 +131,55 @@ export default function IdentityOnboarding() {
           }}
         >
           {step === 0 && (
-            <>
-              {text("Full name (as on passport)", "fullName", { autoComplete: "name" })}
-              {text("Email", "email", { type: "email", autoComplete: "email" })}
-              {text("Phone", "phone", { type: "tel", autoComplete: "tel" })}
-            </>
+            <FormSection title="Personal" description="Use your name exactly as in your passport.">
+              <FieldGrid>
+                {text("Full name (as on passport)", "fullName", { autoComplete: "name" })}
+                {text("Email", "email", { type: "email", autoComplete: "email" })}
+                {text("Phone", "phone", { type: "tel", autoComplete: "tel" })}
+              </FieldGrid>
+            </FormSection>
           )}
           {step === 1 && (
-            <>
-              {text("Father’s name", "fatherName")}
-              {text("Mother’s name", "motherName")}
-            </>
+            <FormSection title="Family">
+              <FieldGrid>
+                {text("Father’s name", "fatherName")}
+                {text("Mother’s name", "motherName")}
+              </FieldGrid>
+            </FormSection>
           )}
           {step === 2 && (
-            <>
+            <FormSection title="Address">
               {addressFields("currentAddress", "Current address")}
               <label className="flex min-h-tap items-center gap-3 text-sm">
-                <input type="checkbox" className="h-5 w-5 accent-orange" checked={form.permanentSameAsCurrent} onChange={(e) => set("permanentSameAsCurrent", e.target.checked)} />
+                <input
+                  type="checkbox"
+                  className="h-5 w-5 accent-orange"
+                  checked={form.permanentSameAsCurrent}
+                  onChange={(e) => set("permanentSameAsCurrent", e.target.checked)}
+                />
                 Permanent address is the same as current
               </label>
               {!form.permanentSameAsCurrent && addressFields("permanentAddress", "Permanent address")}
-            </>
+            </FormSection>
           )}
           {step === 3 && (
-            <>
+            <FormSection title="Passport & consent">
               {text("Passport number", "passportNumber")}
               <label className="flex min-h-tap items-start gap-3 text-sm">
-                <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-orange" checked={form.identityConsent} onChange={(e) => set("identityConsent", e.target.checked)} />
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-orange"
+                  checked={form.identityConsent}
+                  onChange={(e) => set("identityConsent", e.target.checked)}
+                />
                 <span>I consent to NIVO processing my identity data to provide my services.</span>
               </label>
-              {errors.identityConsent && <p role="alert" className="text-xs font-medium text-red-700">Consent is required.</p>}
-            </>
+              {errors.identityConsent && (
+                <p role="alert" className="text-xs font-medium text-red-700">
+                  Consent is required.
+                </p>
+              )}
+            </FormSection>
           )}
 
           {formError && <p role="alert" className="text-sm font-medium text-red-700">{formError}</p>}

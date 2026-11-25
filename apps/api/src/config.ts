@@ -50,6 +50,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   /** Must match an Authorized redirect URI in Google Cloud Console. */
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
+  /** First super_admin bootstrap (created on startup if none exists). */
+  ADMIN_EMAIL: z.string().email().optional(),
+  ADMIN_PASSWORD: z.string().min(10).optional(),
+  ADMIN_FULL_NAME: z.string().min(2).max(120).optional(),
 });
 
 const DEV_ENCRYPTION_KEY = "dev-only-insecure-identity-encryption-key-0000";

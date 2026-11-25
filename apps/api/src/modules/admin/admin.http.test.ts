@@ -129,6 +129,56 @@ describe("admin routes + permissions middleware", () => {
     });
     expect(res.statusCode).toBe(403); // operations_approver only has identity:view_masked
   });
+
+  it("super_admin can create another admin and a consultancy with referral code", async () => {
+    const { app, mailer, repos } = await createTestApp();
+    const admin = await signUpAndLogin(app, mailer, { email: "root-team@example.com" });
+    await promote(repos, "root-team@example.com", "super_admin");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/admin/admins",
+      headers: { cookie: admin.cookie },
+      payload: {
+        email: "second@nivo.test",
+        fullName: "Second Admin",
+        password: "NivoAdmin1234",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const second = await repos.users.findByEmail("second@nivo.test");
+    expect(second?.role).toBe("super_admin");
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/v1/admin/admins",
+      headers: { cookie: admin.cookie },
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().admins.some((a: { email: string }) => a.email === "second@nivo.test")).toBe(true);
+
+    const cons = await app.inject({
+      method: "POST",
+      url: "/v1/admin/consultancies",
+      headers: { cookie: admin.cookie },
+      payload: {
+        name: "Delhi Advisors",
+        code: "delhi01",
+        managerEmail: "delhi@nivo.test",
+        managerPassword: "NivoConsul1234",
+        managerName: "Delhi Manager",
+      },
+    });
+    expect(cons.statusCode).toBe(201);
+    expect(cons.json().code).toBe("DELHI01");
+    expect(cons.json().link).toBe("/r/DELHI01");
+    expect(cons.json().manager?.email).toBe("delhi@nivo.test");
+    const manager = await repos.users.findByEmail("delhi@nivo.test");
+    expect(manager?.role).toBe("consultancy");
+    expect(await repos.consultancies.getMembership(manager!.id)).toMatchObject({
+      consultancyId: cons.json().id,
+    });
+  });
 });
 
 describe("partners, legal and consultancy routes", () => {

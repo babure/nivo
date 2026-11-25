@@ -57,8 +57,18 @@ function mapMe(data: MeResponse): SessionUser {
     avatarUrl: data.user.avatarUrl ?? null,
     passwordSet: data.user.passwordSet !== false,
     googleLinked: Boolean(data.user.googleLinked),
-    // Product roles: student (null), super_admin, consultancy.
-    role: role === "super_admin" ? "admin" : role === "consultancy" ? "consultancy" : "student",
+    // Product roles: student (null/undefined), super_admin → admin, consultancy.
+    // Never treat unknown staff roles as students (that puts them in the student shell).
+    role:
+      role === "super_admin"
+        ? "admin"
+        : role === "consultancy"
+          ? "consultancy"
+          : role === null || role === undefined || role === ""
+            ? "student"
+            : role === "admin"
+              ? "admin"
+              : "student",
     permissions: data.permissions ?? [],
     paymentStatus: data.paymentStatus,
     identityComplete: data.identityComplete,
@@ -127,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     setUser(null);
+    setCsrfToken(null);
   }, []);
 
   const value = useMemo(

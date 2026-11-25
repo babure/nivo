@@ -11,6 +11,7 @@ import { bindApprovalsDb } from "./modules/admin/approvals-store.js";
 import { bindProofsDb } from "./modules/proofs/store.js";
 import { startRetentionWorker } from "./jobs/retention.js";
 import { PostgresRepositories } from "./repositories/postgres.js";
+import { bootstrapAdmin } from "./seed/bootstrap-admin.js";
 import { seedDevData } from "./seed/dev-data.js";
 
 // Load apps/api/.env into process.env before config parsing.
@@ -33,6 +34,7 @@ async function main(): Promise<void> {
   bindProofsDb(dbHandle.db);
   const repos = new PostgresRepositories(dbHandle.db);
   await repos.ensureDefaults();
+  await bootstrapAdmin(repos, config, logger);
 
   const app = await buildApp({
     config,

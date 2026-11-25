@@ -851,13 +851,17 @@ export class PostgresRepositories implements Repositories {
         referralCode: input.referralCode,
       });
     },
+    list: async () => {
+      const rows = await this.db.select().from(s.consultancies).orderBy(asc(s.consultancies.name));
+      return rows.map((r) => ({ id: r.id, name: r.name, referralCode: r.referralCode }));
+    },
     findByReferralCode: async (code) => {
       const [row] = await this.db
         .select()
         .from(s.consultancies)
         .where(sql`upper(${s.consultancies.referralCode}) = ${code.toUpperCase()}`)
         .limit(1);
-      return row ? { id: row.id, name: row.name } : null;
+      return row ? { id: row.id, name: row.name, referralCode: row.referralCode } : null;
     },
     getMembership: async (userId) => {
       const [row] = await this.db
@@ -866,6 +870,12 @@ export class PostgresRepositories implements Repositories {
         .where(eq(s.consultancyUsers.userId, userId))
         .limit(1);
       return row ? { consultancyId: row.consultancyId, role: row.role } : null;
+    },
+    addMember: async (userId, consultancyId, role = "owner") => {
+      await this.db
+        .insert(s.consultancyUsers)
+        .values({ userId, consultancyId, role })
+        .onConflictDoNothing();
     },
     listSharedStudents: async (consultancyId) => {
       const rows = await this.db

@@ -264,8 +264,10 @@ export interface ClickRepo {
 
 export interface ConsultancyRepo {
   create(input: { id: string; name: string; referralCode: string }): Promise<void>;
-  findByReferralCode(code: string): Promise<{ id: string; name: string } | null>;
+  list(): Promise<{ id: string; name: string; referralCode: string }[]>;
+  findByReferralCode(code: string): Promise<{ id: string; name: string; referralCode?: string } | null>;
   getMembership(userId: string): Promise<{ consultancyId: string; role: string } | null>;
+  addMember(userId: string, consultancyId: string, role?: string): Promise<void>;
   /** students of the consultancy who consented to progress sharing */
   listSharedStudents(consultancyId: string): Promise<string[]>;
 }

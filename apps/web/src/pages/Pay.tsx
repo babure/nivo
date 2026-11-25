@@ -99,7 +99,7 @@ export default function Pay() {
     <Page
       title="Activate your account"
       intro="One payment unlocks your arrival path. Partner products stay separate."
-      narrow
+      compact
     >
       {banner && (
         <p role="status" className="mb-4 rounded-xl border border-saffron/50 bg-[#FFF6EB] px-3 py-2.5 text-sm">
