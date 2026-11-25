@@ -14,6 +14,7 @@ export type SessionUser = {
   id: string;
   email: string;
   fullName?: string;
+  phone?: string;
   avatarUrl?: string | null;
   passwordSet: boolean;
   googleLinked: boolean;
@@ -21,6 +22,8 @@ export type SessionUser = {
   permissions: Permission[];
   paymentStatus: string;
   identityComplete: boolean;
+  /** True when published Terms version differs from the student’s latest consent. */
+  termsReacceptRequired: boolean;
 };
 
 type AuthContextValue = {
@@ -38,6 +41,7 @@ type MeResponse = {
     id: string;
     email: string;
     fullName: string;
+    phone?: string;
     role: string | null;
     avatarUrl?: string | null;
     passwordSet?: boolean;
@@ -46,6 +50,7 @@ type MeResponse = {
   paymentStatus: string;
   identityComplete: boolean;
   permissions: Permission[];
+  termsReacceptRequired?: boolean;
 };
 
 function mapMe(data: MeResponse): SessionUser {
@@ -54,6 +59,7 @@ function mapMe(data: MeResponse): SessionUser {
     id: data.user.id,
     email: data.user.email,
     fullName: data.user.fullName,
+    phone: data.user.phone ?? "",
     avatarUrl: data.user.avatarUrl ?? null,
     passwordSet: data.user.passwordSet !== false,
     googleLinked: Boolean(data.user.googleLinked),
@@ -72,6 +78,7 @@ function mapMe(data: MeResponse): SessionUser {
     permissions: data.permissions ?? [],
     paymentStatus: data.paymentStatus,
     identityComplete: data.identityComplete,
+    termsReacceptRequired: Boolean(data.termsReacceptRequired),
   };
 }
 

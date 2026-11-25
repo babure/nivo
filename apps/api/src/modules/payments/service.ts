@@ -218,6 +218,7 @@ export class PaymentsService {
         amountCents: this.feeCents,
         currency: this.feeCurrency,
         issuedAt: now,
+        paymentRef: input.providerRef,
       });
       await createDocument({
         userId: input.userId,

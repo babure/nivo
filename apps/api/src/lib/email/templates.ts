@@ -54,8 +54,8 @@ export function renderMailTemplate(
       const amount = vars.amountLabel ?? "€149";
       return {
         subject: `NIVO payment receipt${inv ? ` — ${inv}` : ""}`,
-        text: `Hi ${name},\n\nWe received your NIVO service fee (${amount}).${inv ? `\nInvoice: ${inv}` : ""}\n\nDownload invoices anytime from Documents: ${base}/documents\n\nThank you for starting your journey with NIVO.`,
-        html: `<p>Hi ${name},</p><p>We received your NIVO service fee (${amount}).${inv ? ` Invoice <strong>${inv}</strong>.` : ""}</p><p><a href="${base}/documents">View documents</a></p><p>Thank you for starting your journey with NIVO.</p>`,
+        text: `Hi ${name},\n\nWe received your NIVO service fee (${amount}).${inv ? `\nInvoice: ${inv}` : ""}\n\nDownload invoices anytime from Document store: ${base}/documents\n\nThank you for starting your journey with NIVO.`,
+        html: `<p>Hi ${name},</p><p>We received your NIVO service fee (${amount}).${inv ? ` Invoice <strong>${inv}</strong>.` : ""}</p><p><a href="${base}/documents">Open Document store</a></p><p>Thank you for starting your journey with NIVO.</p>`,
       };
     }
     case "sim_unlocked": {

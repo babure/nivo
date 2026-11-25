@@ -18,7 +18,7 @@ export function CookieBanner() {
       role="dialog"
       aria-modal="false"
       aria-label="Cookies"
-      className="fixed inset-x-0 bottom-0 z-50 p-3 sm:p-4"
+      className="fixed inset-x-0 bottom-0 z-50 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4"
     >
       <div className="mx-auto max-w-3xl rounded-2xl border border-charcoal/10 bg-white p-4 shadow-xl sm:p-5">
         <h2 className="text-base font-semibold">Cookies</h2>

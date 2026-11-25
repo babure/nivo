@@ -360,7 +360,7 @@ export const settings = pgTable("settings", {
   updatedAt: updatedAt(),
 });
 
-// ───────────────────────── approvals (maker-checker) ─────────────────────────
+// ───────────────────────── approvals (legacy tables; unused by app) ─────────────────────────
 
 export const approvalRequests = pgTable("approval_requests", {
   id: id(),

@@ -40,4 +40,40 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(201).send(saved);
     },
   );
+
+  app.delete(
+    "/v1/identity/files/:id",
+    { preHandler: app.requireAuth, config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const { id } = parseStrict(z.object({ id: z.string().uuid() }), req.params);
+      await identity.removeFile(requireAuthContext(req).user.id, id);
+      return reply.code(204).send();
+    },
+  );
+
+  app.get(
+    "/v1/identity/files/:id/view",
+    { preHandler: app.requireAuth, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const { id } = parseStrict(z.object({ id: z.string().uuid() }), req.params);
+      const file = await identity.getFileContent(requireAuthContext(req).user.id, id);
+      reply.header("Content-Type", file.mime);
+      reply.header("Content-Disposition", `inline; filename="${file.filename}"`);
+      reply.header("Cache-Control", "private, no-store");
+      return reply.send(file.body);
+    },
+  );
+
+  app.get(
+    "/v1/identity/files/:id/download",
+    { preHandler: app.requireAuth, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const { id } = parseStrict(z.object({ id: z.string().uuid() }), req.params);
+      const file = await identity.getFileContent(requireAuthContext(req).user.id, id);
+      reply.header("Content-Type", file.mime);
+      reply.header("Content-Disposition", `attachment; filename="${file.filename}"`);
+      reply.header("Cache-Control", "private, no-store");
+      return reply.send(file.body);
+    },
+  );
 }

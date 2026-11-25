@@ -49,6 +49,30 @@ describe("CardsService", () => {
     ).rejects.toMatchObject({ code: "CARD_LOCKED" });
   });
 
+  it("admin bypass can force status on a locked card", async () => {
+    const unpaid = createTestServices();
+    await unpaid.auth.register({ ...registerInput, email: "locked@example.com" });
+    await unpaid.auth.verifyEmail(
+      unpaid.mailer.lastTokenFor("locked@example.com", "verify_email")!,
+    );
+    const student = (await unpaid.repos.users.findByEmail("locked@example.com"))!;
+    await expect(
+      unpaid.cards.setStatus(student.id, "blocked_account", "in_progress"),
+    ).rejects.toMatchObject({ code: "CARD_LOCKED" });
+
+    const view = await unpaid.cards.setStatus(student.id, "blocked_account", "in_progress", {
+      actorId: "admin",
+      bypassStudentLimits: true,
+    });
+    expect(view.status).toBe("in_progress");
+
+    const completed = await unpaid.cards.setStatus(student.id, "blocked_account", "completed", {
+      actorId: "admin",
+      bypassStudentLimits: true,
+    });
+    expect(completed.status).toBe("completed");
+  });
+
   it("T-CARD-010: completing Blocked Account unlocks SIM", async () => {
     expect(DEFAULT_SIM_REQUIRED).toEqual(["blocked_account"]);
     await svc.cards.setStatus(userId, "blocked_account", "in_progress");

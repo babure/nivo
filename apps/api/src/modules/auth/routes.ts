@@ -1,5 +1,11 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { emailSchema, passwordSchema, registerSchema } from "@nivo/shared";
+import {
+  emailSchema,
+  passwordPresentSchema,
+  passwordSchema,
+  referralCodeSchema,
+  registerSchema,
+} from "@nivo/shared";
 import { z } from "zod";
 import { csrfCookieName, issueCsrfToken, peekCsrfToken } from "../../lib/csrf.js";
 import { AppError, parseStrict } from "../../lib/errors.js";
@@ -21,6 +27,10 @@ const oauthStartQuery = z.object({
   ref: z.string().max(32).optional(),
   terms: z.string().max(40).optional(),
   privacy: z.string().max(40).optional(),
+  share: z
+    .enum(["0", "1", "true", "false"])
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
 });
 
 type OAuthStateCookie = {
@@ -29,25 +39,34 @@ type OAuthStateCookie = {
   ref?: string;
   terms?: string;
   privacy?: string;
+  share?: boolean;
 };
 
 const loginSchema = z.object({
   email: emailSchema,
   // do not apply strength rules at login (legacy passwords must still be able to sign in)
-  password: z.string().min(1).max(128),
-  totp: z.string().regex(/^\d{6}$/).optional(),
+  password: passwordPresentSchema,
+  totp: z.string().regex(/^\d{6}$/, "Enter the 6-digit authenticator code").optional(),
 });
-const tokenSchema = z.object({ token: z.string().min(20).max(200) });
+const tokenSchema = z.object({
+  token: z.string().min(20, "Invalid or incomplete token").max(200),
+});
 const forgotSchema = z.object({ email: emailSchema });
-const resetSchema = z.object({ token: z.string().min(20).max(200), password: passwordSchema });
-const totpEnableSchema = z.object({ secret: z.string().min(16).max(64), code: z.string().regex(/^\d{6}$/) });
+const resetSchema = z.object({
+  token: z.string().min(20, "Invalid or incomplete token").max(200),
+  password: passwordSchema,
+});
+const totpEnableSchema = z.object({
+  secret: z.string().min(16).max(64),
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit authenticator code"),
+});
 const deletionSchema = z.object({
-  password: z.string().min(1).max(128).optional(),
+  password: passwordPresentSchema.optional(),
   confirmEmail: emailSchema.optional(),
 });
 const setPasswordBody = z.object({
   password: passwordSchema,
-  currentPassword: z.string().min(1).max(128).optional(),
+  currentPassword: passwordPresentSchema.optional(),
 });
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
@@ -176,6 +195,28 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ status: "password_updated" });
   });
 
+  app.get("/v1/me/referral", { preHandler: app.requireAuth }, async (req) => {
+    return auth.getReferral(requireAuthContext(req).user.id);
+  });
+
+  app.post("/v1/me/referral", { preHandler: app.requireAuth, ...limit }, async (req) => {
+    const raw = parseStrict(
+      z.object({
+        code: z.string().trim().max(32).optional(),
+        shareProgressWithConsultancy: z.boolean().optional(),
+      }),
+      req.body,
+    );
+    const code =
+      raw.code && raw.code.length > 0 ? referralCodeSchema.parse(raw.code) : undefined;
+    const ctx = requireAuthContext(req);
+    return auth.applyReferral(
+      ctx.user.id,
+      { code, shareProgressWithConsultancy: raw.shareProgressWithConsultancy },
+      { ip: req.ip, userAgent: req.headers["user-agent"] },
+    );
+  });
+
   app.post("/v1/me/deletion-request", { preHandler: app.requireAuth, ...limit }, async (req, reply) => {
     const body = parseStrict(deletionSchema, req.body);
     const res = await auth.requestDeletion(requireAuthContext(req).user.id, body);
@@ -200,6 +241,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         ref: z.string().max(32).optional(),
         terms: z.string().max(40).optional(),
         privacy: z.string().max(40).optional(),
+        shareProgressWithConsultancy: z.boolean().optional(),
       }),
       req.body,
     );
@@ -220,6 +262,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         referralCode: body.ref ?? null,
         termsVersion: body.terms ?? null,
         privacyVersion: body.privacy ?? null,
+        shareProgressWithConsultancy: body.shareProgressWithConsultancy === true,
       },
       { ip: req.ip, userAgent: req.headers["user-agent"] },
     );
@@ -242,6 +285,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       ref: q.ref,
       terms: q.terms,
       privacy: q.privacy,
+      share: q.share === true,
     };
     reply.setCookie(OAUTH_STATE_COOKIE, JSON.stringify(payload), {
       httpOnly: true,
@@ -300,6 +344,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           referralCode: stored.ref ?? null,
           termsVersion: stored.terms ?? null,
           privacyVersion: stored.privacy ?? null,
+          shareProgressWithConsultancy: stored.share === true,
         },
         { ip: req.ip, userAgent: req.headers["user-agent"] },
       );

@@ -62,11 +62,20 @@ export function parseWith<S extends ZodTypeAny>(schema: S, data: unknown): z.inf
   return schema.parse(data);
 }
 
-export function zodDetails(err: ZodError): unknown[] {
+export function zodDetails(err: ZodError): { path: string; code: string; message: string }[] {
   // Never echo submitted values (may contain passwords / PII).
   return err.issues.map((i) => ({
     path: i.path.join("."),
     code: i.code,
     message: i.message,
   }));
+}
+
+/** Short actionable summary for the top-level error.message. */
+export function zodSummary(err: ZodError): string {
+  const details = zodDetails(err);
+  if (details.length === 0) return "Request validation failed.";
+  const parts = details.map((d) => (d.path ? `${d.path}: ${d.message}` : d.message));
+  if (parts.length === 1) return parts[0]!;
+  return `Fix ${parts.length} fields: ${parts.slice(0, 3).join(" · ")}${parts.length > 3 ? "…" : ""}`;
 }

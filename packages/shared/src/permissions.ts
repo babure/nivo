@@ -14,6 +14,8 @@ export const PERMISSIONS = [
   "cards:publish",
   "settings:links:edit",
   "settings:sim_rules:edit",
+  "settings:texts:edit",
+  "reports:read",
   "legal:edit",
   "legal:publish",
   "leads:read",
@@ -25,54 +27,19 @@ export const PERMISSIONS = [
   "admins:manage",
   "roles:manage",
   "audit:read",
-  "approvals:decide",
   "vouchers:mark_sent",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
 /**
- * Product roles in Phase 1: `super_admin`, `consultancy` (students have role=null).
- * Extra keys remain for permission-unit tests only — they are not seeded or UI-mapped.
+ * Product roles: `super_admin` (admin UI), `consultancy` (portal).
+ * Students have `role = null` and no admin permissions.
  */
 export const DEFAULT_ROLES: Record<string, readonly Permission[]> = {
   super_admin: PERMISSIONS,
-  consultancy: ["consultancies:manage", "students:read", "exports:students"],
-  // Legacy fine-grained keys kept for existing permission unit tests:
-  operations_approver: [
-    "students:read",
-    "students:mark_paid",
-    "students:set_card_status",
-    "payments:refund",
-    "proofs:approve",
-    "proofs:reject",
-    "identity:view_masked",
-    "approvals:decide",
-    "audit:read",
-    "vouchers:mark_sent",
-  ],
-  support: ["students:read", "identity:view_masked", "leads:read", "audit:read"],
-  finance: [
-    "students:read",
-    "students:mark_paid",
-    "payments:refund",
-    "exports:students",
-    "approvals:decide",
-    "audit:read",
-  ],
-  content_legal_editor: [
-    "cards:create",
-    "cards:edit",
-    "cards:publish",
-    "settings:links:edit",
-    "settings:sim_rules:edit",
-    "legal:edit",
-    "legal:publish",
-    "approvals:decide",
-  ],
-  accommodation_agent: ["leads:read", "leads:update_status"],
-  consultancy_manager: ["consultancies:manage", "students:read", "exports:students"],
-  auditor: ["audit:read", "students:read", "leads:read"],
+  /** Portal uses membership checks, not admin permissions — keep empty to block /v1/admin/*. */
+  consultancy: [],
 };
 
 export function hasPermission(
@@ -89,14 +56,4 @@ export function assertPermission(
   if (!hasPermission(granted, required)) {
     throw new Error(`FORBIDDEN:${required}`);
   }
-}
-
-/** Requester cannot approve their own request (maker-checker). */
-export function canApproveRequest(
-  requesterId: string,
-  approverId: string,
-  approverPerms: readonly Permission[],
-): boolean {
-  if (requesterId === approverId) return false;
-  return hasPermission(approverPerms, "approvals:decide");
 }

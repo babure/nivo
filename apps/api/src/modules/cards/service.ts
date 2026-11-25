@@ -93,6 +93,7 @@ export class CardsService {
     await this.syncSim(userId);
     const c = await this.context(userId);
     return c.defs
+      .filter((def) => def.published !== false)
       .sort((a, b) => a.position - b.position)
       .map((def) => {
         const status = dashboardCardAvailability({
@@ -123,34 +124,45 @@ export class CardsService {
     return card;
   }
 
-  /** Student-driven transition. Server recomputes availability; client input is never trusted. */
+  /**
+   * Student-driven transition by default. With `bypassStudentLimits` (admin),
+   * locked/coming_soon cards can be force-set — used by the Students panel.
+   */
   async setStatus(
     userId: string,
     cardKey: string,
     target: CardStatus,
     opts: { actorId?: string; bypassStudentLimits?: boolean } = {},
   ): Promise<CardView> {
-    const current = await this.statusOf(userId, cardKey);
+    const defs = await this.deps.repos.cards.listDefinitions();
+    const def = defs.find((d) => d.key === cardKey);
+    if (!def) throw new AppError("NOT_FOUND", "Unknown card.");
 
-    if (!opts.bypassStudentLimits && !STUDENT_SETTABLE.includes(target)) {
+    const current = await this.statusOf(userId, cardKey);
+    const bypass = opts.bypassStudentLimits === true;
+
+    if (!bypass && !STUDENT_SETTABLE.includes(target)) {
       throw new AppError("FORBIDDEN", "This status cannot be set directly.");
     }
-    if (current.status === "locked" || current.status === "coming_soon") {
+    if (!bypass && (current.status === "locked" || current.status === "coming_soon")) {
       throw new AppError("CARD_LOCKED", "This card is not available yet.");
     }
     if (current.status === target) return current;
-    if (!canTransition(current.status, target)) {
+    if (!bypass && !canTransition(current.status, target)) {
       throw new AppError("CONFLICT", `Cannot move card from ${current.status} to ${target}.`);
     }
 
     await this.deps.repos.cards.setProgress(userId, cardKey, target);
-    await this.deps.audit.append({
-      actorId: opts.actorId ?? userId,
-      action: "cards.set_status",
-      entityType: "card",
-      entityId: `${userId}:${cardKey}`,
-      meta: { from: current.status, to: target },
-    });
+    // Admin route writes its own audit entry with the reason; avoid duplicates.
+    if (!bypass) {
+      await this.deps.audit.append({
+        actorId: opts.actorId ?? userId,
+        action: "cards.set_status",
+        entityType: "card",
+        entityId: `${userId}:${cardKey}`,
+        meta: { from: current.status, to: target },
+      });
+    }
     await this.syncSim(userId);
     return this.statusOf(userId, cardKey);
   }

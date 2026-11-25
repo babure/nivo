@@ -18,13 +18,17 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
-    scroll-behavior: smooth;
+    overflow-x: clip;
+  }
+
+  /* Avoid phantom side gutters on phones; keep desktop layout stable. */
+  @media (min-width: 768px) {
+    html {
+      scrollbar-gutter: stable;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    html {
-      scroll-behavior: auto;
-    }
     *,
     *::before,
     *::after {
@@ -38,11 +42,20 @@
     @apply font-sans text-charcoal antialiased;
     margin: 0;
     min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: clip;
     background-color: var(--color-paper);
     background-image:
       radial-gradient(48rem 28rem at 100% 0%, rgb(251 119 11 / 0.08), transparent 55%),
       linear-gradient(180deg, #f7f5f1 0%, var(--color-paper) 42%, #ebe7e0 100%);
-    background-attachment: fixed;
+    /* fixed backgrounds jank on iOS Safari */
+    background-attachment: scroll;
+  }
+
+  @media (min-width: 768px) {
+    body {
+      background-attachment: fixed;
+    }
   }
 
   a {
@@ -63,8 +76,15 @@
 
   .btn {
     @apply inline-flex min-h-tap min-w-tap items-center justify-center gap-2 rounded-xl px-5 py-2.5
-      text-[0.95rem] font-semibold no-underline transition
+      text-[0.95rem] font-semibold no-underline
       disabled:cursor-not-allowed disabled:opacity-60;
+    transition-property: color, background-color, border-color, transform, opacity;
+    transition-duration: 140ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    touch-action: manipulation;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
   }
   .btn-primary {
     @apply btn bg-orange text-white hover:bg-orange-dark active:translate-y-px;
@@ -94,16 +114,25 @@
   }
 
   .nav-rail-link {
-    @apply flex min-h-tap items-center rounded-xl px-3 py-2 text-sm no-underline transition-colors;
+    /* Border (not ring) so the highlight stays inside rounded corners. */
+    @apply flex min-h-tap items-center gap-2.5 rounded-xl border border-transparent px-2.5 py-2 text-sm font-medium no-underline transition-colors;
   }
   .nav-rail-link-active {
-    @apply nav-rail-link bg-white font-semibold text-charcoal shadow-sm ring-1 ring-charcoal/10;
+    @apply nav-rail-link border-orange/30 bg-orange/10 text-orange-dark;
   }
   .nav-rail-link-idle {
-    @apply nav-rail-link font-medium text-charcoal-soft hover:bg-white hover:text-charcoal;
+    @apply nav-rail-link text-charcoal-soft hover:border-charcoal/10 hover:bg-white hover:text-charcoal;
+  }
+  .nav-rail-link:focus-visible {
+    outline: 2px solid var(--color-orange);
+    outline-offset: 0;
   }
 
   .status-pill {
     @apply inline-flex min-h-6 items-center rounded-md px-2 text-[11px] font-semibold;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-md bg-charcoal/[0.08];
   }
 }

@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { EncryptedBlob } from "@nivo/shared";
 import type { Db } from "../db/client.js";
 import * as s from "../db/schema.js";
-import { readEncryptedBlob, writeEncryptedBlob } from "../lib/storage.js";
+import { readEncryptedBlob, removeStorageKey, writeEncryptedBlob } from "../lib/storage.js";
 import { DEFAULT_CARDS, DEFAULT_LEGAL } from "./memory.js";
 import {
   UniqueViolationError,
@@ -84,9 +84,18 @@ export class PostgresRepositories implements Repositories {
           description: c.description,
           position: c.position,
           comingSoon: c.comingSoon,
-          published: true,
+          published: c.published !== false,
         })
-        .onConflictDoNothing();
+        .onConflictDoUpdate({
+          target: s.cards.key,
+          set: {
+            title: c.title,
+            description: c.description,
+            position: c.position,
+            comingSoon: c.comingSoon,
+            published: c.published !== false,
+          },
+        });
     }
     for (const d of DEFAULT_LEGAL) {
       await this.db
@@ -102,9 +111,9 @@ export class PostgresRepositories implements Repositories {
         .onConflictDoNothing();
     }
     await this.settings.set("partner_links", {
-      expatrio: "https://example.com/expatrio",
+      expatrio: "https://www.expatrio.com/?p=nivoug",
+      fintiba: "http://partner.fintiba.com/nivoug",
       vodafone: "https://example.com/vodafone",
-      swarajya: "https://example.com/swarajya",
     }, null);
     const roshan = await this.settings.get<string>("roshan.email");
     if (!roshan) await this.settings.set("roshan.email", "roshan@example.com", null);
@@ -225,6 +234,7 @@ export class PostgresRepositories implements Repositories {
       });
     },
     consume: async (tokenHash, purpose, now) => {
+      // Use drizzle `gt` — raw sql`${now}` with postgres-js throws ERR_INVALID_ARG_TYPE on Date.
       const [row] = await this.db
         .update(s.authTokens)
         .set({ usedAt: now })
@@ -233,7 +243,7 @@ export class PostgresRepositories implements Repositories {
             eq(s.authTokens.tokenHash, tokenHash),
             eq(s.authTokens.purpose, purpose),
             isNull(s.authTokens.usedAt),
-            sql`${s.authTokens.expiresAt} > ${now}`,
+            gt(s.authTokens.expiresAt, now),
           ),
         )
         .returning();
@@ -453,11 +463,7 @@ export class PostgresRepositories implements Repositories {
 
   cards: Repositories["cards"] = {
     listDefinitions: async () => {
-      const rows = await this.db
-        .select()
-        .from(s.cards)
-        .where(eq(s.cards.published, true))
-        .orderBy(asc(s.cards.position));
+      const rows = await this.db.select().from(s.cards).orderBy(asc(s.cards.position));
       return rows.map(
         (r): CardDefinition => ({
           key: r.key,
@@ -465,8 +471,32 @@ export class PostgresRepositories implements Repositories {
           description: r.description ?? "",
           position: r.position,
           comingSoon: r.comingSoon,
+          published: r.published,
         }),
       );
+    },
+    upsertDefinition: async (def) => {
+      await this.db
+        .insert(s.cards)
+        .values({
+          key: def.key,
+          title: def.title,
+          description: def.description,
+          position: def.position,
+          comingSoon: def.comingSoon,
+          published: def.published,
+        })
+        .onConflictDoUpdate({
+          target: s.cards.key,
+          set: {
+            title: def.title,
+            description: def.description,
+            position: def.position,
+            comingSoon: def.comingSoon,
+            published: def.published,
+          },
+        });
+      return { ...def };
     },
     listProgress: async (userId) => {
       const rows = await this.db.select().from(s.cardProgress).where(eq(s.cardProgress.userId, userId));
@@ -577,6 +607,14 @@ export class PostgresRepositories implements Repositories {
         blob,
         createdAt: r.createdAt,
       };
+    },
+    deleteFile: async (id) => {
+      const [r] = await this.db.select().from(s.identityFiles).where(eq(s.identityFiles.id, id)).limit(1);
+      if (!r) return false;
+      await this.db.update(s.proofs).set({ fileId: null }).where(eq(s.proofs.fileId, id));
+      await this.db.delete(s.identityFiles).where(eq(s.identityFiles.id, id));
+      await removeStorageKey(r.storageKey);
+      return true;
     },
   };
 
@@ -855,6 +893,10 @@ export class PostgresRepositories implements Repositories {
       const rows = await this.db.select().from(s.consultancies).orderBy(asc(s.consultancies.name));
       return rows.map((r) => ({ id: r.id, name: r.name, referralCode: r.referralCode }));
     },
+    findById: async (id) => {
+      const [row] = await this.db.select().from(s.consultancies).where(eq(s.consultancies.id, id)).limit(1);
+      return row ? { id: row.id, name: row.name, referralCode: row.referralCode } : null;
+    },
     findByReferralCode: async (code) => {
       const [row] = await this.db
         .select()
@@ -876,6 +918,14 @@ export class PostgresRepositories implements Repositories {
         .insert(s.consultancyUsers)
         .values({ userId, consultancyId, role })
         .onConflictDoNothing();
+    },
+    hasMembers: async (consultancyId) => {
+      const [row] = await this.db
+        .select({ userId: s.consultancyUsers.userId })
+        .from(s.consultancyUsers)
+        .where(eq(s.consultancyUsers.consultancyId, consultancyId))
+        .limit(1);
+      return Boolean(row);
     },
     listSharedStudents: async (consultancyId) => {
       const rows = await this.db

@@ -9,18 +9,21 @@ export type CheckoutCharge = {
 };
 
 /**
- * Adaptive Pricing only localizes prices whose currency is one of the account's
- * settlement currencies. An NZ sandbox that only settles NZD cannot Adaptive-Price
- * an EUR line item — Checkout stays in EUR.
+ * List price is always €149 (SERVICE_CURRENCY / SERVICE_FEE_CENTS).
  *
- * Prefer explicit STRIPE_CHARGE_* overrides; otherwise auto-convert the €149 fee
- * into the account default currency when it is not EUR.
+ * Default: charge in EUR so Checkout shows euros, and Stripe Adaptive Pricing can
+ * present a local amount (e.g. INR for Indian customers) when the account supports it.
+ *
+ * Opt into matching the Stripe account default currency (e.g. NZD sandboxes) only via
+ * `matchSettlement: true` or explicit STRIPE_CHARGE_* overrides.
  */
 export async function resolveCheckoutCharge(
   stripe: Stripe,
   opts: {
     overrideCurrency?: string;
     overrideAmountCents?: number;
+    /** When true, convert €149 into the account default_currency if it is not EUR. */
+    matchSettlement?: boolean;
   } = {},
 ): Promise<CheckoutCharge> {
   if (opts.overrideCurrency && opts.overrideAmountCents) {
@@ -29,6 +32,10 @@ export async function resolveCheckoutCharge(
       amountCents: opts.overrideAmountCents,
       reason: "settlement_override",
     };
+  }
+
+  if (!opts.matchSettlement) {
+    return { currency: SERVICE_CURRENCY, amountCents: SERVICE_FEE_CENTS, reason: "product_eur" };
   }
 
   const account = await stripe.accounts.retrieve();

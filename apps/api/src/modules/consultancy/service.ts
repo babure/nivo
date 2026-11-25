@@ -11,11 +11,17 @@ export class ConsultancyService {
     return { id, code: referralCode, link: `/r/${referralCode}` };
   }
 
+  async lookupByCode(code: string) {
+    const trimmed = code.trim();
+    if (!trimmed) return { valid: false as const };
+    const c = await this.repos.consultancies.findByReferralCode(trimmed);
+    if (!c) return { valid: false as const };
+    return { valid: true as const, id: c.id, name: c.name, code: c.referralCode, link: `/r/${c.referralCode}` };
+  }
+
   /** Pseudonymised funnel — never returns passport/address/payment details */
   async dashboard(consultancyId: string) {
-    // Memory repo may expose list helpers differently; scan users via profiles.
-    const allProfiles: Awaited<ReturnType<Repositories["profiles"]["get"]>>[] = [];
-    // In-memory implementation detail: iterate known users through consultancies filter if available
+    const org = await this.repos.consultancies.findById(consultancyId);
     const students: {
       pseudoId: string;
       displayName: string;
@@ -26,30 +32,7 @@ export class ConsultancyService {
       phone?: string;
     }[] = [];
 
-    // Use repository method if present for listing by consultancy
-    const listBy =
-      (
-        this.repos.profiles as unknown as {
-          listByConsultancy?: (id: string) => Promise<
-            {
-              userId: string;
-              paymentStatus: string;
-              identityComplete: boolean;
-              shareProgressWithConsultancy: boolean;
-            }[]
-          >;
-        }
-      ).listByConsultancy;
-
-    let profiles =
-      listBy != null
-        ? await listBy(consultancyId)
-        : allProfiles.filter(Boolean);
-
-    if (!listBy) {
-      // Fallback: empty for repos without list helper — tests use create + direct upsert
-      profiles = [];
-    }
+    const profiles = await this.repos.profiles.listByConsultancy(consultancyId);
 
     for (const p of profiles) {
       if (!p) continue;
@@ -74,12 +57,13 @@ export class ConsultancyService {
     }
 
     return {
+      organisation: org
+        ? { id: org.id, name: org.name, code: org.referralCode, link: `/r/${org.referralCode}` }
+        : null,
       counts: {
         registered: students.length,
         verified: students.filter((s) => s.stage !== "registered").length,
-        paid: students.filter((s) =>
-          ["paid", "identity_complete"].includes(s.stage),
-        ).length,
+        paid: students.filter((s) => ["paid", "identity_complete"].includes(s.stage)).length,
         identity: students.filter((s) => s.stage === "identity_complete").length,
       },
       students,

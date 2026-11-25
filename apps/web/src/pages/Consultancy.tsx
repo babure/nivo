@@ -1,12 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
+import { Check, Copy, FileDown, Users } from "lucide-react";
+import { DataTable } from "../components/DataTable";
 import { Page } from "../components/Page";
+import { Skeleton, StatGridSkeleton } from "../components/Skeleton";
 import { WorkspaceShell } from "../components/WorkspaceShell";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { logoutPathFor } from "../lib/navigation";
+import { useToast } from "../lib/toast";
 
 type Dashboard = {
+  organisation: { id: string; name: string; code: string; link: string } | null;
   counts: { registered: number; verified: number; paid: number; identity: number };
   students: {
     pseudoId: string;
@@ -18,6 +24,14 @@ type Dashboard = {
     phone?: string;
   }[];
 };
+
+type ReferralRow = Dashboard["students"][number];
+const referralCol = createColumnHelper<ReferralRow>();
+
+function absoluteReferralUrl(link: string) {
+  if (typeof window === "undefined") return link;
+  return `${window.location.origin}${link.startsWith("/") ? link : `/${link}`}`;
+}
 
 function ConsultancyLayout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
@@ -34,26 +48,18 @@ function ConsultancyLayout({ children }: { children: React.ReactNode }) {
       brandHref="/consultancy/dashboard"
       eyebrow="Consultancy"
       title="Consultancy"
+      mobileNav
       nav={[
         {
           to: "/consultancy/dashboard",
           label: "Referrals",
           end: true,
           description: "Students attributed to you",
+          icon: Users,
         },
       ]}
-      userSlot={
-        <div className="space-y-2">
-          <p className="truncate px-1 text-xs text-charcoal-soft">{user?.email}</p>
-          <button
-            type="button"
-            className="text-sm font-medium text-charcoal-soft underline-offset-4 hover:text-charcoal hover:underline"
-            onClick={() => void onLogout()}
-          >
-            Log out
-          </button>
-        </div>
-      }
+      user={user}
+      onLogout={() => void onLogout()}
     >
       {children}
     </WorkspaceShell>
@@ -61,15 +67,71 @@ function ConsultancyLayout({ children }: { children: React.ReactNode }) {
 }
 
 function ConsultancyDashboard() {
+  const toast = useToast();
   const [data, setData] = useState<Dashboard | null>(null);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     void api
       .get<Dashboard>("/v1/consultancy/dashboard")
-      .then(setData)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load referrals."));
+      .then((res) => {
+        setData(res);
+        setError(undefined);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load referrals."))
+      .finally(() => setReady(true));
   }, []);
+
+  async function copyLink() {
+    if (!data?.organisation?.link) return;
+    try {
+      await navigator.clipboard.writeText(absoluteReferralUrl(data.organisation.link));
+      setCopied(true);
+      toast.success("Join link copied");
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy link — select and copy it manually.");
+    }
+  }
+
+  const columns = useMemo(
+    () =>
+      [
+        referralCol.accessor("displayName", {
+          header: "Student",
+          cell: (info) => (
+            <div>
+              <div className="font-medium text-charcoal">{info.getValue()}</div>
+              <div className="font-mono text-xs text-charcoal-soft">{info.row.original.pseudoId}</div>
+            </div>
+          ),
+        }),
+        referralCol.accessor("country", { header: "Country" }),
+        referralCol.accessor("intake", { header: "Intake" }),
+        referralCol.accessor("stage", {
+          header: "Stage",
+          cell: (info) => <span className="capitalize">{info.getValue().replaceAll("_", " ")}</span>,
+        }),
+        referralCol.display({
+          id: "contact",
+          header: "Contact",
+          enableSorting: false,
+          cell: ({ row }) => {
+            const s = row.original;
+            if (!s.email && !s.phone) return <span className="text-xs text-charcoal-soft">Hidden</span>;
+            return (
+              <div className="text-xs text-charcoal-soft">
+                {s.email && <div>{s.email}</div>}
+                {s.phone && <div>{s.phone}</div>}
+              </div>
+            );
+          },
+        }),
+      ] as ColumnDef<ReferralRow, unknown>[],
+    [],
+  );
 
   return (
     <ConsultancyLayout>
@@ -78,10 +140,12 @@ function ConsultancyDashboard() {
         intro="Students attributed to your organisation. Contact details only show when the student consented."
         wide
         compact
+        embedded
         actions={
           <button
             type="button"
             className="btn-secondary text-sm"
+            disabled={!ready || Boolean(error)}
             onClick={() => {
               void (async () => {
                 try {
@@ -96,20 +160,61 @@ function ConsultancyDashboard() {
                   a.download = "consultancy-students.csv";
                   a.click();
                   URL.revokeObjectURL(url);
+                  toast.success("CSV downloaded");
                 } catch {
-                  setError("Could not download CSV.");
+                  toast.error("Could not download CSV.");
                 }
               })();
             }}
           >
+            <FileDown className="h-4 w-4 shrink-0" aria-hidden />
             Download CSV
           </button>
         }
       >
-        {error && <p role="alert" className="mb-4 text-sm font-medium text-red-700">{error}</p>}
-        {data && (
-          <>
-            <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-charcoal/10 bg-white px-4 py-4 sm:px-5">
+            {!ready ? (
+              <div className="space-y-3" role="status" aria-label="Loading organisation">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-7 w-48" />
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-10 w-full rounded-xl" />
+              </div>
+            ) : data?.organisation ? (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-charcoal-soft">Your organisation</p>
+                <p className="mt-1 font-display text-xl font-semibold text-charcoal">{data.organisation.name}</p>
+                <p className="mt-3 text-sm text-charcoal-soft">
+                  Referral code{" "}
+                  <span className="font-mono font-medium text-charcoal">{data.organisation.code}</span>
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <code className="block flex-1 truncate rounded-xl bg-charcoal/[0.04] px-3 py-2 text-xs text-charcoal">
+                    {absoluteReferralUrl(data.organisation.link)}
+                  </code>
+                  <button type="button" className="btn-secondary shrink-0 text-sm" onClick={() => void copyLink()}>
+                    {copied ? (
+                      <Check className="h-4 w-4 shrink-0" aria-hidden />
+                    ) : (
+                      <Copy className="h-4 w-4 shrink-0" aria-hidden />
+                    )}
+                    {copied ? "Copied" : "Copy join link"}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-charcoal-soft">
+                  Share this link with students. They register at NIVO and appear here once attributed.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-charcoal-soft">Organisation details unavailable.</p>
+            )}
+          </div>
+
+          {!ready ? (
+            <StatGridSkeleton />
+          ) : data ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {(
                 [
                   ["Registered", data.counts.registered],
@@ -124,48 +229,21 @@ function ConsultancyDashboard() {
                 </div>
               ))}
             </div>
-            <div className="overflow-x-auto rounded-2xl border border-charcoal/10 bg-white">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-charcoal/10 text-xs text-charcoal-soft">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Student</th>
-                    <th className="px-4 py-3 font-medium">Country</th>
-                    <th className="px-4 py-3 font-medium">Intake</th>
-                    <th className="px-4 py-3 font-medium">Stage</th>
-                    <th className="px-4 py-3 font-medium">Contact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.students.map((s) => (
-                    <tr key={s.pseudoId} className="border-t border-charcoal/8">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-charcoal">{s.displayName}</div>
-                        <div className="font-mono text-xs text-charcoal-soft">{s.pseudoId}</div>
-                      </td>
-                      <td className="px-4 py-3 text-charcoal-soft">{s.country}</td>
-                      <td className="px-4 py-3 text-charcoal-soft">{s.intake}</td>
-                      <td className="px-4 py-3 capitalize text-charcoal">{s.stage.replace("_", " ")}</td>
-                      <td className="px-4 py-3 text-xs text-charcoal-soft">
-                        {s.email || s.phone ? (
-                          <>
-                            {s.email && <div>{s.email}</div>}
-                            {s.phone && <div>{s.phone}</div>}
-                          </>
-                        ) : (
-                          "Hidden"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {data.students.length === 0 && (
-                <p className="p-6 text-sm text-charcoal-soft">No referred students yet. Share your referral link to get started.</p>
-              )}
-            </div>
-          </>
-        )}
-        {!data && !error && <p className="text-sm text-charcoal-soft">Loading…</p>}
+          ) : null}
+
+          <DataTable
+            data={data?.students ?? []}
+            columns={columns}
+            loading={!ready}
+            error={error}
+            searchPlaceholder="Search referred students…"
+            emptyTitle="No referred students yet"
+            emptyDescription="Copy your join link above and share it — students who register with that code appear here."
+            emptyIcon={Users}
+            getRowId={(row) => row.pseudoId}
+            skeletonColumns={5}
+          />
+        </div>
       </Page>
     </ConsultancyLayout>
   );
@@ -175,7 +253,13 @@ export default function ConsultancyRoutes() {
   const { user, ready } = useAuth();
   const location = useLocation();
   if (!ready) return <p className="p-8 text-center text-sm text-charcoal-soft">Checking your session…</p>;
-  if (!user || (user.role !== "consultancy" && user.role !== "admin")) {
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+  if (user.role === "admin") {
+    return <Navigate to="/admin/partners" replace />;
+  }
+  if (user.role !== "consultancy") {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
   return (

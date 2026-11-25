@@ -92,8 +92,8 @@ export function requireAuthContext(req: FastifyRequest): AuthContext {
   return req.auth;
 }
 
-/** Staff roles that must enroll TOTP before using privileged surfaces (REQ-AUTH-05/09). */
-export const STAFF_ROLES = new Set(["super_admin", "consultancy", "accommodation_agent"]);
+/** Non-student roles that must enroll TOTP before using privileged surfaces (REQ-AUTH-05/09). */
+export const STAFF_ROLES = new Set(["super_admin", "consultancy"]);
 
 export function requireStaffMfa(req: FastifyRequest): void {
   const ctx = requireAuthContext(req);

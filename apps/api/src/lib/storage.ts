@@ -1,27 +1,21 @@
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { EncryptedBlob } from "@nivo/shared";
+import { ensureObjectStorageReady, getObjectStorage } from "./object-storage/index.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../storage");
-
-export function storagePath(...parts: string[]): string {
-  return join(ROOT, ...parts);
-}
+/**
+ * Application-facing blob helpers.
+ * Backed by ObjectStorage (local disk or S3-compatible MinIO/R2).
+ */
 
 export async function writeJsonBlob(relKey: string, value: unknown): Promise<void> {
-  const full = storagePath(relKey);
-  await mkdir(dirname(full), { recursive: true });
-  await writeFile(full, JSON.stringify(value), "utf8");
+  const store = await ensureObjectStorageReady();
+  await store.put(relKey, JSON.stringify(value), { contentType: "application/json" });
 }
 
 export async function readJsonBlob<T>(relKey: string): Promise<T | null> {
-  try {
-    const raw = await readFile(storagePath(relKey), "utf8");
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+  const store = getObjectStorage();
+  const obj = await store.get(relKey);
+  if (!obj) return null;
+  return JSON.parse(obj.body.toString("utf8")) as T;
 }
 
 export async function writeEncryptedBlob(relKey: string, blob: EncryptedBlob): Promise<void> {
@@ -32,12 +26,25 @@ export async function readEncryptedBlob(relKey: string): Promise<EncryptedBlob |
   return readJsonBlob<EncryptedBlob>(relKey);
 }
 
-export async function removeStorageKey(relKey: string): Promise<void> {
-  try {
-    await unlink(storagePath(relKey));
-  } catch {
-    /* ignore missing */
-  }
+export async function writeBinaryBlob(
+  relKey: string,
+  body: Buffer,
+  contentType?: string,
+): Promise<void> {
+  const store = await ensureObjectStorageReady();
+  await store.put(relKey, body, { contentType });
 }
 
-export { ROOT as STORAGE_ROOT };
+export async function readBinaryBlob(relKey: string): Promise<{ body: Buffer; contentType?: string } | null> {
+  const store = getObjectStorage();
+  return store.get(relKey);
+}
+
+export async function removeStorageKey(relKey: string): Promise<void> {
+  try {
+    const store = getObjectStorage();
+    await store.delete(relKey);
+  } catch {
+    /* ignore missing / not configured in tests that never write */
+  }
+}

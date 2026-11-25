@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { CARD_STATUSES, canApproveRequest } from "@nivo/shared";
+import {
+  CARD_STATUSES,
+  addManagerSchema,
+  createAdminSchema,
+  createConsultancySchema,
+} from "@nivo/shared";
 import { z } from "zod";
 import { csvRow } from "../../lib/csv.js";
-import { AppError, parseStrict } from "../../lib/errors.js";
+import { AppError, parseStrict, parseWith } from "../../lib/errors.js";
 import { isStepUpFresh } from "../../lib/step-up.js";
 import { requireAuthContext, requireStaffMfa } from "../../plugins/auth.js";
 import { createArgon2Hasher } from "../auth/service.js";
@@ -11,36 +16,55 @@ import { UniqueViolationError, type UserRecord } from "../../repositories/types.
 import { ACCOMMODATION_NOTIFY_SETTING } from "../accommodation/service.js";
 import { PARTNER_LINKS_SETTING, partnerLinksSchema } from "../partners/routes.js";
 import { DEFAULT_SIM_REQUIRED, SIM_RULES_SETTING } from "../cards/service.js";
-import {
-  createApproval,
-  decideApprovalRecord,
-  getApproval,
-  listApprovals,
-  type ApprovalAction,
-} from "./approvals-store.js";
+import { DEFAULT_UI_COPY, UI_COPY_SETTING, mergeUiCopy } from "../copy/defaults.js";
+import { listProofs } from "../proofs/store.js";
 import { requirePermission } from "./permissions.js";
 
-const idParams = z.object({ id: z.string().uuid() });
-const cardParams = z.object({ id: z.string().uuid(), key: z.string().regex(/^[a-z0-9_]{1,64}$/) });
-const reasonBody = z.object({ reason: z.string().trim().min(10).max(500) });
+const idParams = z.object({
+  id: z.string().uuid("Invalid id"),
+});
+const cardParams = z.object({
+  id: z.string().uuid("Invalid id"),
+  key: z.string().regex(/^[a-z0-9_]{1,64}$/, "Invalid card key"),
+});
+const reasonBody = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(10, "Give a reason of at least 10 characters")
+    .max(500, "Reason is too long (max 500 characters)"),
+});
 const cardStatusBody = z.object({
-  status: z.enum(CARD_STATUSES),
-  reason: z.string().trim().min(10).max(500),
+  status: z.enum(CARD_STATUSES, {
+    errorMap: () => ({ message: "Choose a valid card status" }),
+  }),
+  reason: z
+    .string()
+    .trim()
+    .min(10, "Give a reason of at least 10 characters")
+    .max(500, "Reason is too long (max 500 characters)"),
 });
 const simRulesBody = z.object({
-  requiredCardKeys: z.array(z.string().regex(/^[a-z0-9_]{1,64}$/)).max(20),
-});
-const decideBody = z.object({
-  decision: z.enum(["approved", "rejected"]),
-  note: z.string().trim().max(500).optional(),
-});
-const createApprovalBody = z.object({
-  action: z.enum(["students:mark_paid", "identity:reveal", "payments:refund", "exports:students", "exports:leads"]),
-  targetUserId: z.string().uuid(),
-  reason: z.string().trim().min(10).max(500),
+  requiredCardKeys: z
+    .array(z.string().regex(/^[a-z0-9_]{1,64}$/, "Invalid card key"))
+    .max(20, "Too many required cards (max 20)"),
 });
 const notifyEmailBody = z.object({
   email: z.string().email().max(200),
+});
+const cardDefBody = z.object({
+  key: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/, "Use a lowercase slug (letters, numbers, underscores)")
+    .optional(),
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(2000).default(""),
+  position: z.number().int().min(0).max(999).optional(),
+  comingSoon: z.boolean().optional(),
+  published: z.boolean().optional(),
+});
+const textsBody = z.object({
+  texts: z.record(z.string().max(2000)).refine((o) => Object.keys(o).length <= 80, "Too many text keys"),
 });
 
 function assertStepUp(sessionId: string) {
@@ -51,10 +75,6 @@ function assertStepUp(sessionId: string) {
   ) {
     throw new AppError("STEP_UP_REQUIRED", "Re-confirm with your two-factor code.");
   }
-}
-
-function isSuperAdmin(role: string | null): boolean {
-  return role === "super_admin";
 }
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
@@ -76,27 +96,138 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  app.get("/v1/admin/reports/funnel", { preHandler: requirePermission("reports:read") }, async () => {
+    const [users, profiles, defs, leads, pendingProofList] = await Promise.all([
+      repos.users.list(),
+      repos.profiles.list(),
+      repos.cards.listDefinitions(),
+      repos.leads.list(),
+      listProofs({ status: "pending" }),
+    ]);
+    const studentIds = users.filter((u) => !u.role && !u.deletedAt).map((u) => u.id);
+    const profileByUser = new Map(profiles.map((p) => [p.userId, p]));
+    const students = studentIds.filter((id) => profileByUser.has(id));
+    let paid = 0;
+    const completions: Record<string, number> = {};
+    for (const def of defs) completions[def.key] = 0;
+    let simUnlocked = 0;
+
+    await Promise.all(
+      students.map(async (id) => {
+        const p = profileByUser.get(id);
+        if (p?.paymentStatus === "paid") paid += 1;
+        const progress = await repos.cards.listProgress(id);
+        for (const row of progress) {
+          if (row.status === "completed" && completions[row.cardKey] !== undefined) {
+            completions[row.cardKey] += 1;
+          }
+          if (row.cardKey === "sim" && row.status !== "locked") simUnlocked += 1;
+        }
+      }),
+    );
+
+    return {
+      registrations: students.length,
+      paid,
+      unpaid: Math.max(0, students.length - paid),
+      completions,
+      simUnlocked,
+      accommodationLeads: leads.length,
+      pendingProofs: pendingProofList.length,
+      generatedAt: new Date().toISOString(),
+    };
+  });
+
+  app.get("/v1/admin/cards", { preHandler: requirePermission("cards:edit") }, async () => {
+    const cards = await repos.cards.listDefinitions();
+    return { cards: cards.sort((a, b) => a.position - b.position) };
+  });
+
+  app.post("/v1/admin/cards", { preHandler: requirePermission("cards:create") }, async (req, reply) => {
+    const body = parseStrict(
+      z.object({
+        key: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/, "Use a lowercase slug (letters, numbers, underscores)"),
+        title: z.string().trim().min(1).max(160),
+        description: z.string().trim().max(2000).default(""),
+        position: z.number().int().min(0).max(999).optional(),
+        comingSoon: z.boolean().optional(),
+        published: z.boolean().optional(),
+      }),
+      req.body,
+    );
+    const existing = await repos.cards.listDefinitions();
+    if (existing.some((c) => c.key === body.key)) {
+      throw new AppError("CONFLICT", "A card with that key already exists.");
+    }
+    const actor = requireAuthContext(req).user;
+    const position = body.position ?? (existing.reduce((m, c) => Math.max(m, c.position), 0) + 1);
+    const def = await repos.cards.upsertDefinition({
+      key: body.key,
+      title: body.title,
+      description: body.description,
+      position,
+      comingSoon: body.comingSoon ?? true,
+      published: body.published ?? true,
+    });
+    await audit.append({
+      actorId: actor.id,
+      action: "cards.created",
+      entityType: "card",
+      entityId: def.key,
+      meta: { title: def.title },
+    });
+    return reply.code(201).send({ card: def });
+  });
+
+  app.put("/v1/admin/cards/:key", { preHandler: requirePermission("cards:edit") }, async (req, reply) => {
+    const key = parseStrict(z.object({ key: z.string().regex(/^[a-z0-9_]{1,64}$/) }), req.params).key;
+    const body = parseStrict(cardDefBody, req.body);
+    const existing = await repos.cards.listDefinitions();
+    const current = existing.find((c) => c.key === key);
+    if (!current) throw new AppError("NOT_FOUND", "Unknown card.");
+    const actor = requireAuthContext(req).user;
+    const def = await repos.cards.upsertDefinition({
+      key,
+      title: body.title,
+      description: body.description,
+      position: body.position ?? current.position,
+      comingSoon: body.comingSoon ?? current.comingSoon,
+      published: body.published ?? current.published,
+    });
+    await audit.append({
+      actorId: actor.id,
+      action: "cards.updated",
+      entityType: "card",
+      entityId: key,
+      meta: { comingSoon: def.comingSoon, published: def.published },
+    });
+    return reply.send({ card: def });
+  });
+
   app.get("/v1/admin/students", { preHandler: requirePermission("students:read") }, async () => {
     const [users, profiles] = await Promise.all([repos.users.list(), repos.profiles.list()]);
     const byId = new Map(profiles.map((p) => [p.userId, p]));
-    return {
-      students: users
-        .filter((u) => byId.has(u.id))
-        .map((u) => {
-          const p = byId.get(u.id)!;
-          return {
-            id: u.id,
-            fullName: u.fullName,
-            email: u.email,
-            country: u.country,
-            intake: u.intake,
-            emailVerified: u.emailVerifiedAt !== null,
-            paymentStatus: p.paymentStatus,
-            identityComplete: p.identityComplete,
-            createdAt: u.createdAt,
-          };
-        }),
-    };
+    const withProfiles = users.filter((u) => byId.has(u.id));
+    const students = await Promise.all(
+      withProfiles.map(async (u) => {
+        const p = byId.get(u.id)!;
+        const cardViews = await cards.list(u.id);
+        const cardStatus = Object.fromEntries(cardViews.map((c) => [c.key, c.status]));
+        return {
+          id: u.id,
+          fullName: u.fullName,
+          email: u.email,
+          country: u.country,
+          intake: u.intake,
+          emailVerified: u.emailVerifiedAt !== null,
+          paymentStatus: p.paymentStatus,
+          identityComplete: p.identityComplete,
+          createdAt: u.createdAt,
+          cards: cardStatus,
+        };
+      }),
+    );
+    return { students };
   });
 
   app.post(
@@ -107,24 +238,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const { reason } = parseStrict(reasonBody, req.body);
       const actor = requireAuthContext(req).user;
       if (actor.id === id) throw new AppError("FORBIDDEN", "You cannot mark your own account as paid.");
-
-      if (!isSuperAdmin(actor.role)) {
-        const pending = await createApproval({
-          action: "students:mark_paid",
-          requesterId: actor.id,
-          requesterEmail: actor.email,
-          targetUserId: id,
-          reason,
-        });
-        await audit.append({
-          actorId: actor.id,
-          action: "approvals.requested",
-          entityType: "approval",
-          entityId: pending.id,
-          meta: { action: pending.action, targetUserId: id },
-        });
-        return reply.code(202).send({ status: "pending_approval", approvalId: pending.id });
-      }
 
       await payments.markPaidManually(id, actor.id, reason);
       return reply.code(204).send();
@@ -156,106 +269,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/admin/students/:id/identity/reveal",
     { preHandler: requirePermission("identity:reveal") },
-    async (req, reply) => {
+    async (req) => {
       const { id } = parseStrict(idParams, req.params);
       const { reason } = parseStrict(reasonBody, req.body);
       const ctx = requireAuthContext(req);
-      const actor = ctx.user;
       assertStepUp(ctx.sessionId);
-
-      if (!isSuperAdmin(actor.role)) {
-        const pending = await createApproval({
-          action: "identity:reveal",
-          requesterId: actor.id,
-          requesterEmail: actor.email,
-          targetUserId: id,
-          reason,
-        });
-        await audit.append({
-          actorId: actor.id,
-          action: "approvals.requested",
-          entityType: "approval",
-          entityId: pending.id,
-          meta: { action: pending.action, targetUserId: id },
-        });
-        return reply.code(202).send({ status: "pending_approval", approvalId: pending.id });
-      }
-
-      return identity.reveal(id, actor.id, reason);
-    },
-  );
-
-  app.get("/v1/admin/approvals", { preHandler: requirePermission("approvals:decide") }, async (req) => {
-    const status = (req.query as { status?: string }).status;
-    const filter =
-      status === "pending" || status === "approved" || status === "rejected"
-        ? { status: status as "pending" | "approved" | "rejected" }
-        : undefined;
-    return { approvals: await listApprovals(filter) };
-  });
-
-  app.post(
-    "/v1/admin/approvals",
-    { preHandler: requirePermission("approvals:decide") },
-    async (req, reply) => {
-      // Allow creating from Approvals UI as well (requester must still have underlying perm via decide path).
-      const body = parseStrict(createApprovalBody, req.body);
-      const actor = requireAuthContext(req).user;
-      const pending = await createApproval({
-        action: body.action as ApprovalAction,
-        requesterId: actor.id,
-        requesterEmail: actor.email,
-        targetUserId: body.targetUserId,
-        reason: body.reason,
-      });
-      await audit.append({
-        actorId: actor.id,
-        action: "approvals.requested",
-        entityType: "approval",
-        entityId: pending.id,
-        meta: { action: pending.action, targetUserId: body.targetUserId },
-      });
-      return reply.code(201).send(pending);
-    },
-  );
-
-  app.post(
-    "/v1/admin/approvals/:id/decide",
-    { preHandler: requirePermission("approvals:decide") },
-    async (req) => {
-      const { id } = parseStrict(idParams, req.params);
-      const { decision, note } = parseStrict(decideBody, req.body);
-      const ctx = requireAuthContext(req);
-      const existing = await getApproval(id);
-      if (!existing) throw new AppError("NOT_FOUND", "Approval not found.");
-      if (existing.status !== "pending") throw new AppError("CONFLICT", "Approval already decided.");
-      if (!canApproveRequest(existing.requesterId, ctx.user.id, ctx.permissions)) {
-        throw new AppError("FORBIDDEN", "You cannot approve your own request.");
-      }
-
-      const updated = await decideApprovalRecord(id, decision, ctx.user.id, note);
-      if (!updated) throw new AppError("CONFLICT", "Approval already decided.");
-
-      await audit.append({
-        actorId: ctx.user.id,
-        action: decision === "approved" ? "approvals.approved" : "approvals.rejected",
-        entityType: "approval",
-        entityId: id,
-        meta: { action: updated.action, note: note ?? null },
-      });
-
-      if (decision === "approved") {
-        if (updated.action === "students:mark_paid") {
-          await payments.markPaidManually(updated.targetUserId, ctx.user.id, updated.reason);
-        } else if (updated.action === "identity:reveal") {
-          const revealed = await identity.reveal(updated.targetUserId, ctx.user.id, updated.reason);
-          return { approval: updated, result: revealed };
-        } else if (updated.action === "payments:refund") {
-          await payments.refund(updated.targetUserId, ctx.user.id, updated.reason);
-        }
-      }
-
-      return { approval: updated };
+      return identity.reveal(id, ctx.user.id, reason);
     },
   );
 
@@ -269,24 +288,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       assertStepUp(ctx.sessionId);
       if (ctx.user.id === id) throw new AppError("FORBIDDEN", "You cannot refund your own account.");
 
-      if (!isSuperAdmin(ctx.user.role)) {
-        const pending = await createApproval({
-          action: "payments:refund",
-          requesterId: ctx.user.id,
-          requesterEmail: ctx.user.email,
-          targetUserId: id,
-          reason,
-        });
-        await audit.append({
-          actorId: ctx.user.id,
-          action: "approvals.requested",
-          entityType: "approval",
-          entityId: pending.id,
-          meta: { action: pending.action, targetUserId: id },
-        });
-        return reply.code(202).send({ status: "pending_approval", approvalId: pending.id });
-      }
-
       await payments.refund(id, ctx.user.id, reason);
       return reply.code(204).send();
     },
@@ -298,17 +299,43 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/v1/admin/settings", { preHandler: requirePermission("settings:links:edit") }, async () => {
-    const [links, simRules, notifyEmail] = await Promise.all([
+    const [links, simRules, notifyEmail, texts] = await Promise.all([
       repos.settings.get<Record<string, string>>(PARTNER_LINKS_SETTING),
       repos.settings.get<string[]>(SIM_RULES_SETTING),
       repos.settings.get<string>(ACCOMMODATION_NOTIFY_SETTING),
+      repos.settings.get<Record<string, string>>(UI_COPY_SETTING),
     ]);
     return {
       links: links ?? {},
       simRules: Array.isArray(simRules) ? simRules : DEFAULT_SIM_REQUIRED,
       accommodationNotifyEmail: typeof notifyEmail === "string" ? notifyEmail : "",
+      texts: mergeUiCopy(texts),
+      textDefaults: DEFAULT_UI_COPY,
     };
   });
+
+  app.put(
+    "/v1/admin/settings/texts",
+    { preHandler: requirePermission("settings:texts:edit") },
+    async (req, reply) => {
+      const { texts } = parseStrict(textsBody, req.body);
+      const actor = requireAuthContext(req).user;
+      const cleaned = Object.fromEntries(
+        Object.entries(texts)
+          .map(([k, v]) => [k.trim(), typeof v === "string" ? v.trim() : ""])
+          .filter(([k, v]) => k.length > 0 && v.length > 0),
+      );
+      await repos.settings.set(UI_COPY_SETTING, cleaned, actor.id);
+      await audit.append({
+        actorId: actor.id,
+        action: "settings.texts_updated",
+        entityType: "setting",
+        entityId: UI_COPY_SETTING,
+        meta: { keys: Object.keys(cleaned) },
+      });
+      return reply.code(204).send();
+    },
+  );
 
   app.put(
     "/v1/admin/settings/accommodation-notify",
@@ -431,12 +458,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(rows.join("\n"));
   });
 
-  const createAdminBody = z.object({
-    email: z.string().email().max(254),
-    fullName: z.string().trim().min(2).max(80),
-    password: z.string().min(10).max(128),
-  });
-
   app.get("/v1/admin/admins", { preHandler: requirePermission("admins:manage") }, async () => {
     const users = await repos.users.list();
     return {
@@ -453,11 +474,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/v1/admin/admins", { preHandler: requirePermission("admins:manage") }, async (req, reply) => {
-    const body = parseStrict(createAdminBody, req.body);
+    const body = parseStrict(createAdminSchema, req.body);
     const ctx = requireAuthContext(req);
     assertStepUp(ctx.sessionId);
 
-    const email = body.email.trim().toLowerCase();
+    const email = body.email;
     if (await repos.users.findByEmail(email)) {
       throw new AppError("CONFLICT", "An account with that email already exists.");
     }
@@ -504,36 +525,69 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send({ id: user.id, email: user.email, fullName: user.fullName });
   });
 
-  const createConsultancyBody = z.object({
-    name: z.string().trim().min(2).max(160),
-    code: z
-      .string()
-      .trim()
-      .min(4)
-      .max(32)
-      .regex(/^[A-Za-z0-9_-]+$/, "Use letters, numbers, underscore or hyphen only."),
-    managerEmail: z.string().email().max(254).optional(),
-    managerPassword: z.string().min(10).max(128).optional(),
-    managerName: z.string().trim().min(2).max(80).optional(),
-  });
+
+  async function createConsultancyManager(opts: {
+    consultancyId: string;
+    orgName: string;
+    email: string;
+    password: string;
+    fullName?: string;
+  }): Promise<{ id: string; email: string }> {
+    if (await repos.consultancies.hasMembers(opts.consultancyId)) {
+      throw new AppError("CONFLICT", "This consultancy already has a manager login.");
+    }
+    const email = opts.email.trim().toLowerCase();
+    if (await repos.users.findByEmail(email)) {
+      throw new AppError("CONFLICT", "A user with that manager email already exists.");
+    }
+    const hasher = createArgon2Hasher({
+      memoryCost: app.config.ARGON2_MEMORY_KIB,
+      timeCost: app.config.ARGON2_TIME_COST,
+    });
+    const now = new Date();
+    const user: UserRecord = {
+      id: randomUUID(),
+      email,
+      fullName: opts.fullName?.trim() || `${opts.orgName} Manager`,
+      phone: "+49000000000",
+      country: "DE",
+      intake: "consultancy",
+      passwordHash: await hasher.hash(opts.password),
+      emailVerifiedAt: now,
+      role: "consultancy",
+      googleSub: null,
+      avatarUrl: null,
+      passwordSet: true,
+      totpSecret: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      createdAt: now,
+      deletedAt: null,
+    };
+    await repos.users.create(user);
+    await repos.consultancies.addMember(user.id, opts.consultancyId, "owner");
+    return { id: user.id, email: user.email };
+  }
 
   app.get("/v1/admin/consultancies", { preHandler: requirePermission("consultancies:manage") }, async () => {
     const list = await repos.consultancies.list();
-    return {
-      consultancies: list.map((c) => ({
+    const consultancies = await Promise.all(
+      list.map(async (c) => ({
         id: c.id,
         name: c.name,
         code: c.referralCode,
         link: `/r/${c.referralCode}`,
+        hasManager: await repos.consultancies.hasMembers(c.id),
       })),
-    };
+    );
+    return { consultancies };
   });
 
   app.post(
     "/v1/admin/consultancies",
     { preHandler: requirePermission("consultancies:manage") },
     async (req, reply) => {
-      const body = parseStrict(createConsultancyBody, req.body);
+      const body = parseWith(createConsultancySchema, req.body);
       const ctx = requireAuthContext(req);
       assertStepUp(ctx.sessionId);
 
@@ -545,41 +599,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const created = await app.services.consultancy.create(body.name, referralCode);
       let manager: { id: string; email: string } | undefined;
 
-      if (body.managerEmail) {
-        if (!body.managerPassword) {
-          throw new AppError("VALIDATION_FAILED", "Manager password is required when creating a login.");
-        }
-        const email = body.managerEmail.trim().toLowerCase();
-        if (await repos.users.findByEmail(email)) {
-          throw new AppError("CONFLICT", "A user with that manager email already exists.");
-        }
-        const hasher = createArgon2Hasher({
-          memoryCost: app.config.ARGON2_MEMORY_KIB,
-          timeCost: app.config.ARGON2_TIME_COST,
+      if (body.managerEmail && body.managerPassword) {
+        manager = await createConsultancyManager({
+          consultancyId: created.id,
+          orgName: body.name,
+          email: body.managerEmail,
+          password: body.managerPassword,
+          fullName: body.managerName,
         });
-        const now = new Date();
-        const user: UserRecord = {
-          id: randomUUID(),
-          email,
-          fullName: body.managerName?.trim() || `${body.name} Manager`,
-          phone: "+49000000000",
-          country: "DE",
-          intake: "consultancy",
-          passwordHash: await hasher.hash(body.managerPassword),
-          emailVerifiedAt: now,
-          role: "consultancy",
-          googleSub: null,
-          avatarUrl: null,
-          passwordSet: true,
-          totpSecret: null,
-          failedLoginCount: 0,
-          lockedUntil: null,
-          createdAt: now,
-          deletedAt: null,
-        };
-        await repos.users.create(user);
-        await repos.consultancies.addMember(user.id, created.id, "owner");
-        manager = { id: user.id, email: user.email };
       }
 
       await audit.append({
@@ -590,7 +617,39 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         meta: { code: created.code, managerId: manager?.id },
       });
 
-      return reply.code(201).send({ ...created, manager });
+      return reply.code(201).send({ ...created, manager, hasManager: Boolean(manager) });
+    },
+  );
+
+  app.post(
+    "/v1/admin/consultancies/:id/managers",
+    { preHandler: requirePermission("consultancies:manage") },
+    async (req, reply) => {
+      const { id } = parseStrict(idParams, req.params);
+      const body = parseStrict(addManagerSchema, req.body);
+      const ctx = requireAuthContext(req);
+      assertStepUp(ctx.sessionId);
+
+      const org = await repos.consultancies.findById(id);
+      if (!org) throw new AppError("NOT_FOUND", "Consultancy not found.");
+
+      const manager = await createConsultancyManager({
+        consultancyId: org.id,
+        orgName: org.name,
+        email: body.email,
+        password: body.password,
+        fullName: body.fullName,
+      });
+
+      await audit.append({
+        actorId: ctx.user.id,
+        action: "consultancies.manager_added",
+        entityType: "consultancy",
+        entityId: org.id,
+        meta: { managerId: manager.id },
+      });
+
+      return reply.code(201).send({ manager });
     },
   );
 }

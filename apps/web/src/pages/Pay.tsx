@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { SERVICE_CURRENCY, SERVICE_FEE_CENTS } from "@nivo/shared";
 import { Page } from "../components/Page";
+import { CreditCard } from "lucide-react";
 import { Button } from "../components/Button";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useToast } from "../lib/toast";
 
 type CheckoutResponse =
   | { mode: "stripe"; url: string }
@@ -19,22 +21,21 @@ export default function Pay() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { refresh } = useAuth();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
   const [immediateStart, setImmediateStart] = useState(false);
   const [simulateReady, setSimulateReady] = useState(false);
-  const [banner, setBanner] = useState<string>();
   const [termsVersion, setTermsVersion] = useState("2025-01");
   const [withdrawalVersion, setWithdrawalVersion] = useState("2025-01");
 
   useEffect(() => {
     if (searchParams.get("payment") === "cancelled" || searchParams.get("payment") === "cancel") {
-      setBanner("Checkout cancelled. You can try again when ready.");
+      toast.info("Checkout cancelled", "You can try again when ready.");
       const next = new URLSearchParams(searchParams);
       next.delete("payment");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, toast]);
 
   useEffect(() => {
     void api
@@ -58,11 +59,10 @@ export default function Pay() {
 
   async function checkout() {
     if (!immediateStart) {
-      setError("Please confirm that the service may start immediately.");
+      toast.error("Please confirm that the service may start immediately");
       return;
     }
     setBusy(true);
-    setError(undefined);
     try {
       const res = await api.post<CheckoutResponse>("/v1/payments/checkout", consentBody());
       if (res.mode === "stripe" && res.url) {
@@ -73,9 +73,9 @@ export default function Pay() {
         setSimulateReady(true);
         return;
       }
-      setError("Checkout is not available yet. Try again shortly.");
+      toast.error("Checkout is not available yet", "Try again shortly.");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not start checkout.");
+      toast.error("Could not start checkout", err instanceof ApiError ? err.message : undefined);
     } finally {
       setBusy(false);
     }
@@ -83,13 +83,12 @@ export default function Pay() {
 
   async function completeDemoPayment() {
     setBusy(true);
-    setError(undefined);
     try {
       await api.post("/v1/payments/simulate", consentBody());
       await refresh();
       navigate("/onboarding/identity", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not complete demo payment.");
+      toast.error("Could not complete demo payment", err instanceof ApiError ? err.message : undefined);
     } finally {
       setBusy(false);
     }
@@ -99,13 +98,9 @@ export default function Pay() {
     <Page
       title="Activate your account"
       intro="One payment unlocks your arrival path. Partner products stay separate."
+      wide
       compact
     >
-      {banner && (
-        <p role="status" className="mb-4 rounded-xl border border-saffron/50 bg-[#FFF6EB] px-3 py-2.5 text-sm">
-          {banner}
-        </p>
-      )}
       <div className="rounded-2xl border border-charcoal/[0.08] bg-white p-5 shadow-[0_8px_24px_rgba(45,42,38,0.06)] sm:p-6">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wider text-orange-dark">NIVO service fee</p>
@@ -131,14 +126,10 @@ export default function Pay() {
             v{withdrawalVersion}).
           </span>
         </label>
-        {error && (
-          <p role="alert" className="mt-3 text-sm font-medium text-red-700">
-            {error}
-          </p>
-        )}
         <div className="mt-5">
           {!simulateReady ? (
             <Button className="w-full" onClick={() => void checkout()} disabled={busy}>
+              <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
               {busy ? "Starting…" : `Order with obligation to pay · ${eurPrice}`}
             </Button>
           ) : (
@@ -147,6 +138,7 @@ export default function Pay() {
                 Stripe is not configured here. Complete a <strong>demo payment</strong> to continue.
               </p>
               <Button className="w-full" onClick={() => void completeDemoPayment()} disabled={busy}>
+                <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
                 {busy ? "Confirming…" : "Complete payment (demo)"}
               </Button>
             </div>

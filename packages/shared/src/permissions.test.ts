@@ -3,7 +3,6 @@ import {
   DEFAULT_ROLES,
   PERMISSIONS,
   assertPermission,
-  canApproveRequest,
   hasPermission,
 } from "./permissions.js";
 
@@ -14,25 +13,18 @@ describe("permissions registry", () => {
     }
   });
 
-  it("T-ACC-010: accommodation_agent cannot refund or reveal identity", () => {
-    const role = DEFAULT_ROLES.accommodation_agent;
-    expect(hasPermission(role, "leads:read")).toBe(true);
-    expect(hasPermission(role, "payments:refund")).toBe(false);
-    expect(hasPermission(role, "identity:reveal")).toBe(false);
+  it("consultancy has no admin permissions", () => {
+    expect(DEFAULT_ROLES.consultancy).toEqual([]);
+    expect(hasPermission(DEFAULT_ROLES.consultancy, "students:read")).toBe(false);
   });
 
-  it("T-ADM-010: requester cannot approve own request", () => {
-    expect(
-      canApproveRequest("u1", "u1", DEFAULT_ROLES.operations_approver),
-    ).toBe(false);
-    expect(
-      canApproveRequest("u1", "u2", DEFAULT_ROLES.operations_approver),
-    ).toBe(true);
+  it("only product roles are registered", () => {
+    expect(Object.keys(DEFAULT_ROLES).sort()).toEqual(["consultancy", "super_admin"]);
   });
 
   it("assertPermission throws FORBIDDEN", () => {
-    expect(() =>
-      assertPermission(DEFAULT_ROLES.support, "payments:refund"),
-    ).toThrow(/FORBIDDEN:payments:refund/);
+    expect(() => assertPermission(DEFAULT_ROLES.consultancy, "payments:refund")).toThrow(
+      /FORBIDDEN:payments:refund/,
+    );
   });
 });

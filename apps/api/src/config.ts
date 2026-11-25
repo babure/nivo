@@ -19,9 +19,9 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().min(1).optional(),
   STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
   /**
-   * Checkout charge currency/amount. Adaptive Pricing requires the charge currency
-   * to be a settlement currency on the Stripe account. Leave unset to auto-match
-   * the account default (converting €149 when needed). Product list price stays EUR.
+   * Optional explicit charge currency/amount. Default is always EUR €149.
+   * Adaptive Pricing then presents local currencies (e.g. INR) when Stripe allows it.
+   * Set STRIPE_MATCH_SETTLEMENT=true only for sandboxes that cannot charge EUR (e.g. NZD-only).
    */
   STRIPE_CHARGE_CURRENCY: z
     .string()
@@ -30,6 +30,7 @@ const envSchema = z.object({
     .regex(/^[a-z]{3}$/)
     .optional(),
   STRIPE_CHARGE_AMOUNT_CENTS: z.coerce.number().int().positive().optional(),
+  STRIPE_MATCH_SETTLEMENT: bool,
   ARGON2_MEMORY_KIB: z.coerce.number().int().min(1024).default(19456),
   ARGON2_TIME_COST: z.coerce.number().int().min(2).default(2),
   RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(120),
@@ -52,8 +53,33 @@ const envSchema = z.object({
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
   /** First super_admin bootstrap (created on startup if none exists). */
   ADMIN_EMAIL: z.string().email().optional(),
-  ADMIN_PASSWORD: z.string().min(10).optional(),
-  ADMIN_FULL_NAME: z.string().min(2).max(120).optional(),
+  /** Bootstrap password — same strength rules as app passwords (12+ upper/lower/digit). */
+  ADMIN_PASSWORD: z
+    .string()
+    .min(12)
+    .max(128)
+    .refine((v) => /[a-z]/.test(v) && /[A-Z]/.test(v) && /\d/.test(v), {
+      message: "ADMIN_PASSWORD must be 12+ chars with upper, lower and a number",
+    })
+    .optional(),
+  ADMIN_FULL_NAME: z.string().min(2).max(80).optional(),
+  /**
+   * Object storage driver.
+   * - local: disk (tests / offline)
+   * - s3: MinIO locally, Cloudflare R2 in production (same S3 API)
+   */
+  OBJECT_STORAGE: z.enum(["local", "s3"]).default("local"),
+  STORAGE_LOCAL_DIR: z.string().min(1).optional(),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().min(1).default("auto"),
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_KEY: z.string().min(1).optional(),
+  /** MinIO needs path-style; set false for Cloudflare R2 virtual-hosted style. */
+  S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
 });
 
 const DEV_ENCRYPTION_KEY = "dev-only-insecure-identity-encryption-key-0000";

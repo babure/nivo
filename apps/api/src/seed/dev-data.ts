@@ -213,7 +213,7 @@ async function studentProfile(
     id: randomUUID(),
     userId,
     kind: "terms",
-    version: "2025-01",
+    version: "2025-11-draft1",
     ipHash: null,
     acceptedAt: now,
   });
@@ -221,7 +221,7 @@ async function studentProfile(
     id: randomUUID(),
     userId,
     kind: "privacy",
-    version: "2025-01",
+    version: "2025-11-draft1",
     ipHash: null,
     acceptedAt: now,
   });

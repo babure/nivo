@@ -7,7 +7,6 @@ import { createDb } from "./db/client.js";
 import { migrateDatabase } from "./db/migrate.js";
 import { createLogger } from "./lib/logger.js";
 import { bindDocumentsDb } from "./lib/documents-store.js";
-import { bindApprovalsDb } from "./modules/admin/approvals-store.js";
 import { bindProofsDb } from "./modules/proofs/store.js";
 import { startRetentionWorker } from "./jobs/retention.js";
 import { PostgresRepositories } from "./repositories/postgres.js";
@@ -29,7 +28,6 @@ async function main(): Promise<void> {
   logger.info("Database migrations applied");
 
   const dbHandle = createDb(config.DATABASE_URL);
-  bindApprovalsDb(dbHandle.db);
   bindDocumentsDb(dbHandle.db);
   bindProofsDb(dbHandle.db);
   const repos = new PostgresRepositories(dbHandle.db);

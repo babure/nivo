@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { resolvePostLoginPath } from "../lib/navigation";
+import { useToast } from "../lib/toast";
 
 type Props = {
   next?: string;
   referralCode?: string;
+  shareProgressWithConsultancy?: boolean;
   termsVersion?: string;
   privacyVersion?: string;
   requireTerms?: boolean;
@@ -63,6 +65,7 @@ function loadGis(): Promise<void> {
 export function GoogleSignInButton({
   next,
   referralCode,
+  shareProgressWithConsultancy,
   termsVersion,
   privacyVersion,
   requireTerms,
@@ -70,10 +73,10 @@ export function GoogleSignInButton({
 }: Props) {
   const { refresh } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const clientRef = useRef<TokenClient | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
-  const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
 
@@ -82,24 +85,24 @@ export function GoogleSignInButton({
   const finishLogin = useCallback(
     async (accessToken: string) => {
       setBusy(true);
-      setError(undefined);
       try {
         await api.post("/v1/auth/google", {
           accessToken,
           ref: referralCode,
           terms: termsVersion,
           privacy: privacyVersion,
+          shareProgressWithConsultancy: shareProgressWithConsultancy === true,
         });
         const me = await refresh();
         if (!me) throw new ApiError(401, "UNAUTHORIZED", "Could not load your session.");
         navigate(resolvePostLoginPath(me, next), { replace: true });
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Google sign-in failed.");
+        toast.error("Google sign-in failed", err instanceof ApiError ? err.message : undefined);
       } finally {
         setBusy(false);
       }
     },
-    [navigate, next, privacyVersion, referralCode, refresh, termsVersion],
+    [navigate, next, privacyVersion, referralCode, refresh, shareProgressWithConsultancy, termsVersion, toast],
   );
 
   useEffect(() => {
@@ -124,30 +127,29 @@ export function GoogleSignInButton({
           scope: "openid email profile",
           callback: (res) => {
             if (res.error || !res.access_token) {
-              setError("Google sign-in was cancelled.");
+              toast.error("Google sign-in was cancelled");
               setBusy(false);
               return;
             }
             void finishLogin(res.access_token);
           },
           error_callback: () => {
-            setError("Google sign-in failed. Try again.");
+            toast.error("Google sign-in failed", "Try again.");
             setBusy(false);
           },
         });
         if (!cancelled) setReady(true);
       } catch {
-        if (!cancelled) setError("Could not load Google sign-in.");
+        if (!cancelled) toast.error("Could not load Google sign-in");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [clientId, enabled, finishLogin]);
+  }, [clientId, enabled, finishLogin, toast]);
 
   function onClick() {
     if (blocked || busy || !clientRef.current) return;
-    setError(undefined);
     setBusy(true);
     clientRef.current.requestAccessToken({ prompt: "select_account" });
   }
@@ -168,7 +170,6 @@ export function GoogleSignInButton({
       {blocked ? (
         <p className="text-center text-xs text-charcoal-soft">Accept age + terms above to continue with Google.</p>
       ) : null}
-      {error ? <p role="alert" className="text-center text-sm font-medium text-red-700">{error}</p> : null}
       <div className="relative flex items-center gap-3 text-xs text-charcoal-soft">
         <span className="h-px flex-1 bg-charcoal/15" />
         or continue with email

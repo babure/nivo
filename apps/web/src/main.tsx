@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./lib/auth";
 import { ConsentProvider } from "./lib/consent";
+import { ToastProvider } from "./lib/toast";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -11,7 +12,9 @@ createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <AuthProvider>
         <ConsentProvider>
-          <App />
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </ConsentProvider>
       </AuthProvider>
     </BrowserRouter>

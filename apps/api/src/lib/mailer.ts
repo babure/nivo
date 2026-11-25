@@ -30,11 +30,14 @@ export interface Mailer {
 /**
  * Domain mailer: renders auth templates, then hands off to an EmailProvider
  * (Resend today; Brevo/SES/etc. later via createEmailProvider).
+ *
+ * In non-production, provider failures are logged (with the action link when present)
+ * instead of failing the request — Resend test mode only delivers to the account owner.
  */
 export class TemplateMailer implements Mailer {
   constructor(
     private readonly provider: EmailProvider,
-    private readonly opts: { appUrl: string; from: string },
+    private readonly opts: { appUrl: string; from: string; softFail?: boolean },
   ) {}
 
   get providerName(): string {
@@ -47,13 +50,21 @@ export class TemplateMailer implements Mailer {
       token: msg.token,
       vars: msg.vars,
     });
-    await this.provider.send({
-      to: msg.to,
-      from: this.opts.from,
-      subject: rendered.subject,
-      html: rendered.html,
-      text: rendered.text,
-    });
+    try {
+      await this.provider.send({
+        to: msg.to,
+        from: this.opts.from,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const link = rendered.text.match(/https?:\/\/\S+/)?.[0];
+      console.warn(`[mail] ${msg.template} → ${msg.to} failed: ${detail}`);
+      if (link) console.warn(`[mail] Dev fallback link: ${link}`);
+      if (!this.opts.softFail) throw err;
+    }
   }
 }
 
@@ -108,5 +119,7 @@ export function createMailer(config: AppConfig): Mailer {
   return new TemplateMailer(createEmailProvider(config), {
     appUrl: config.APP_URL,
     from: config.EMAIL_FROM,
+    /** Resend sandbox rejects non-owner addresses; don’t 500 signup/login flows locally. */
+    softFail: !config.isProd,
   });
 }

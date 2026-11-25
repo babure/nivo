@@ -80,6 +80,19 @@ describe("SIM unlock engine", () => {
     ).toBe("locked");
   });
 
+  it("stored progress wins over unpaid gate (admin override / resume)", () => {
+    expect(
+      dashboardCardAvailability({
+        paymentPaid: false,
+        identityComplete: false,
+        cardKey: "blocked_account",
+        requiredForSim: ["blocked_account"],
+        progress: [{ cardKey: "blocked_account", status: "in_progress" }],
+        comingSoon: false,
+      }),
+    ).toBe("in_progress");
+  });
+
   it("identity incomplete gates blocked_account", () => {
     expect(
       dashboardCardAvailability({

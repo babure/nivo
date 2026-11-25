@@ -9,7 +9,7 @@ import {
 describe("navigation helpers", () => {
   it("sends each role to its home", () => {
     expect(homePathFor({ role: "admin", paymentStatus: "unpaid", identityComplete: false })).toBe(
-      "/admin/students",
+      "/admin/dashboard",
     );
     expect(
       homePathFor({ role: "consultancy", paymentStatus: "unpaid", identityComplete: false }),
@@ -23,6 +23,14 @@ describe("navigation helpers", () => {
     expect(homePathFor({ role: "student", paymentStatus: "paid", identityComplete: true })).toBe(
       "/dashboard",
     );
+    expect(
+      homePathFor({
+        role: "student",
+        paymentStatus: "paid",
+        identityComplete: true,
+        termsReacceptRequired: true,
+      }),
+    ).toBe("/legal/reaccept");
   });
 
   it("ignores student from= for admin login", () => {
@@ -30,7 +38,7 @@ describe("navigation helpers", () => {
     expect(isSafeReturnPath("/dashboard", "admin")).toBe(false);
     expect(isSafeReturnPath("/pay", "admin")).toBe(false);
     expect(isSafeReturnPath("/admin/leads", "admin")).toBe(true);
-    expect(resolvePostLoginPath(admin, "/dashboard")).toBe("/admin/students");
+    expect(resolvePostLoginPath(admin, "/dashboard")).toBe("/admin/dashboard");
     expect(resolvePostLoginPath(admin, "/admin/proofs")).toBe("/admin/proofs");
   });
 

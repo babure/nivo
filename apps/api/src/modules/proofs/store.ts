@@ -51,15 +51,19 @@ export async function createProof(input: {
   return rec;
 }
 
-export async function listProofs(filter?: { status?: ProofRecord["status"] }): Promise<ProofRecord[]> {
+export async function listProofs(filter?: {
+  status?: ProofRecord["status"];
+  userId?: string;
+}): Promise<ProofRecord[]> {
   if (!db) {
     let all = [...memory.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     if (filter?.status) all = all.filter((p) => p.status === filter.status);
+    if (filter?.userId) all = all.filter((p) => p.userId === filter.userId);
     return all;
   }
   const rows = await db.select().from(s.proofs).orderBy(desc(s.proofs.createdAt));
   return rows
-    .filter((r) => !filter?.status || r.status === filter.status)
+    .filter((r) => (!filter?.status || r.status === filter.status) && (!filter?.userId || r.userId === filter.userId))
     .map((r) => ({
       id: r.id,
       userId: r.userId,

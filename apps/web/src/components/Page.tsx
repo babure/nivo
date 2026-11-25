@@ -8,6 +8,8 @@ export function Page({
   wide,
   compact,
   actions,
+  /** Inside WorkspaceShell — title lives in the top bar; don’t repeat the h1. */
+  embedded,
 }: {
   title: string;
   intro?: string;
@@ -19,23 +21,43 @@ export function Page({
   /** Tighter padding for after-login shells */
   compact?: boolean;
   actions?: ReactNode;
+  embedded?: boolean;
 }) {
-  const width = narrow ? "max-w-lg" : wide ? "max-w-6xl" : "max-w-3xl";
-  const pad = compact ? "px-4 py-4 sm:px-6 sm:py-5" : "px-4 py-6 sm:px-6 sm:py-8";
+  // Workspace shells (admin / consultancy / student) share the same content width.
+  const width = narrow ? "max-w-lg" : wide || embedded ? "max-w-6xl" : "max-w-3xl";
+  const pad =
+    compact || embedded
+      ? "px-3 py-4 sm:px-6 sm:py-5"
+      : "px-3 py-5 sm:px-6 sm:py-8";
+  const showHeading = !embedded;
+
   return (
     <div className={`mx-auto w-full ${width} ${pad}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="font-display text-xl font-semibold tracking-tight text-charcoal sm:text-2xl">{title}</h1>
-          {intro && (
-            <p className={`max-w-prose text-sm leading-relaxed text-charcoal-soft ${compact ? "mt-1" : "mt-2"}`}>
-              {intro}
-            </p>
+      {(showHeading || actions) && (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          {showHeading ? (
+            <div className="min-w-0">
+              <h1 className="font-display text-xl font-semibold tracking-tight text-charcoal sm:text-2xl">{title}</h1>
+              {intro && (
+                <p className={`max-w-prose text-sm leading-relaxed text-charcoal-soft ${compact ? "mt-1" : "mt-2"}`}>
+                  {intro}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="min-w-0 md:hidden">
+              <h1 className="font-display text-lg font-semibold tracking-tight text-charcoal">{title}</h1>
+              {intro ? <p className="mt-0.5 text-xs text-charcoal-soft">{intro}</p> : null}
+            </div>
           )}
+          {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
-      </div>
-      {children && <div className={compact ? "mt-4 sm:mt-5" : "mt-6 sm:mt-8"}>{children}</div>}
+      )}
+      {children && (
+        <div className={showHeading || actions ? (compact ? "mt-4 sm:mt-5" : "mt-6 sm:mt-8") : undefined}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -51,7 +73,7 @@ export function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-charcoal/10 bg-white p-4 sm:p-5">
+    <section className="rounded-2xl border border-charcoal/10 bg-white p-3.5 sm:p-5">
       <header className="mb-3 border-b border-charcoal/10 pb-3">
         <h2 className="font-display text-sm font-semibold text-charcoal">{title}</h2>
         {description ? <p className="mt-0.5 text-xs leading-relaxed text-charcoal-soft">{description}</p> : null}
@@ -111,7 +133,9 @@ export function NextStep({
     <div className="rounded-2xl border border-orange/25 bg-white p-4 shadow-soft sm:p-5">
       <p className="font-display text-base font-semibold text-charcoal sm:text-lg">{title}</p>
       <p className="mt-1 text-sm leading-relaxed text-charcoal-soft">{body}</p>
-      <div className="mt-3">{action}</div>
+      <div className="mt-3 flex flex-col gap-2 [&_.btn-primary]:w-full [&_.btn-secondary]:w-full sm:[&_.btn-primary]:w-auto sm:[&_.btn-secondary]:w-auto">
+        {action}
+      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ export const PARTNER_LINKS_SETTING = "partner_links";
 
 const PLACEHOLDERS = ["{{referral_code}}", "{{student_id}}", "{{user_id}}"] as const;
 
-/** key -> https URL template (optional placeholders). */
+/** key -> http(s) URL template (optional placeholders). */
 export const partnerLinksSchema = z.record(
   z.string().regex(/^[a-z0-9_]{1,64}$/),
   z
@@ -18,11 +18,11 @@ export const partnerLinksSchema = z.record(
       const stripped = PLACEHOLDERS.reduce((acc, p) => acc.split(p).join("x"), u);
       try {
         const parsed = new URL(stripped);
-        return parsed.protocol === "https:";
+        return parsed.protocol === "https:" || parsed.protocol === "http:";
       } catch {
         return false;
       }
-    }, "Only https link templates are allowed"),
+    }, "Only http(s) link templates are allowed"),
 );
 
 const keyParams = z.object({ key: z.string().regex(/^[a-z0-9_]{1,64}$/) });
@@ -51,7 +51,7 @@ export async function partnersRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/v1/partners", async () => ({ partners: Object.keys(await links()) }));
 
-  /** Click-tracking redirect with templated HTTPS URLs (REQ-PART-01/03/04). */
+  /** Click-tracking redirect with templated http(s) URLs (REQ-PART-01/03/04). */
   app.get("/v1/partners/:key/go", async (req, reply) => {
     const { key } = parseStrict(keyParams, req.params);
     const urlTemplate = (await links())[key];
@@ -71,8 +71,8 @@ export async function partnersRoutes(app: FastifyInstance): Promise<void> {
     } catch {
       throw new AppError("INTERNAL", "Partner link is misconfigured.");
     }
-    if (parsed.protocol !== "https:") {
-      throw new AppError("FORBIDDEN", "Partner redirects must use https.");
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new AppError("FORBIDDEN", "Partner redirects must use http or https.");
     }
 
     await repos.clicks.record({

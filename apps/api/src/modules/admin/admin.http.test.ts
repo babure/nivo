@@ -17,7 +17,7 @@ describe("admin routes + permissions middleware", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("forbids students and roles lacking the permission, and audits the denial", async () => {
+  it("forbids students and consultancy from admin routes and audits the denial", async () => {
     const { app, mailer, repos } = await createTestApp();
     const student = await signUpAndLogin(app, mailer);
     const denied = await app.inject({
@@ -27,18 +27,20 @@ describe("admin routes + permissions middleware", () => {
     });
     expect(denied.statusCode).toBe(403);
 
-    // support can read students but not mark paid
-    const staff = await signUpAndLogin(app, mailer, { email: "support@example.com" });
-    await promote(repos, "support@example.com", "support");
-    const list = await app.inject({ method: "GET", url: "/v1/admin/students", headers: { cookie: staff.cookie } });
-    expect(list.statusCode).toBe(200);
-    expect(JSON.stringify(list.json())).not.toContain("passwordHash");
+    const cons = await signUpAndLogin(app, mailer, { email: "cons@example.com" });
+    await promote(repos, "cons@example.com", "consultancy");
+    const list = await app.inject({
+      method: "GET",
+      url: "/v1/admin/students",
+      headers: { cookie: cons.cookie },
+    });
+    expect(list.statusCode).toBe(403);
 
     const target = (await repos.users.findByEmail("ada@example.com"))!;
     const mark = await app.inject({
       method: "POST",
       url: `/v1/admin/students/${target.id}/mark-paid`,
-      headers: { cookie: staff.cookie },
+      headers: { cookie: cons.cookie },
       payload: { reason: "manual bank transfer received" },
     });
     expect(mark.statusCode).toBe(403);
@@ -46,55 +48,21 @@ describe("admin routes + permissions middleware", () => {
     expect(audit.some((a) => a.action === "admin.permission_denied")).toBe(true);
   });
 
-  it("finance queues mark-paid for approval; second approver executes; audit chain verifies", async () => {
-    const { app, mailer, repos } = await createTestApp();
-    await signUpAndLogin(app, mailer);
-    const fin = await signUpAndLogin(app, mailer, { email: "fin@example.com" });
-    await promote(repos, "fin@example.com", "finance");
-    const ops = await signUpAndLogin(app, mailer, { email: "ops2@example.com" });
-    await promote(repos, "ops2@example.com", "operations_approver");
-    const target = (await repos.users.findByEmail("ada@example.com"))!;
-
-    const bad = await app.inject({
-      method: "POST",
-      url: `/v1/admin/students/${target.id}/mark-paid`,
-      headers: { cookie: fin.cookie },
-      payload: { reason: "manual bank transfer received", extra: 1 },
-    });
-    expect(bad.statusCode).toBe(400);
-
-    const queued = await app.inject({
-      method: "POST",
-      url: `/v1/admin/students/${target.id}/mark-paid`,
-      headers: { cookie: fin.cookie },
-      payload: { reason: "manual bank transfer received" },
-    });
-    expect(queued.statusCode).toBe(202);
-    expect(queued.json().status).toBe("pending_approval");
-    expect((await repos.profiles.get(target.id))?.paymentStatus).toBe("unpaid");
-
-    const approvalId = queued.json().approvalId as string;
-    const decided = await app.inject({
-      method: "POST",
-      url: `/v1/admin/approvals/${approvalId}/decide`,
-      headers: { cookie: ops.cookie },
-      payload: { decision: "approved" },
-    });
-    expect(decided.statusCode).toBe(200);
-    expect((await repos.profiles.get(target.id))?.paymentStatus).toBe("paid");
-
-    const audit = await app.inject({ method: "GET", url: "/v1/admin/audit", headers: { cookie: fin.cookie } });
-    expect(audit.statusCode).toBe(200);
-    expect(audit.json().chain.valid).toBe(true);
-    expect(audit.json().entries.some((e: { action: string }) => e.action === "payments.manual_mark_paid")).toBe(true);
-  });
-
-  it("super_admin marks paid immediately without approval", async () => {
+  it("super_admin marks paid immediately and audit chain verifies", async () => {
     const { app, mailer, repos } = await createTestApp();
     await signUpAndLogin(app, mailer);
     const admin = await signUpAndLogin(app, mailer, { email: "root-paid@example.com" });
     await promote(repos, "root-paid@example.com", "super_admin");
     const target = (await repos.users.findByEmail("ada@example.com"))!;
+
+    const bad = await app.inject({
+      method: "POST",
+      url: `/v1/admin/students/${target.id}/mark-paid`,
+      headers: { cookie: admin.cookie },
+      payload: { reason: "manual bank transfer received", extra: 1 },
+    });
+    expect(bad.statusCode).toBe(400);
+
     const ok = await app.inject({
       method: "POST",
       url: `/v1/admin/students/${target.id}/mark-paid`,
@@ -103,6 +71,15 @@ describe("admin routes + permissions middleware", () => {
     });
     expect(ok.statusCode).toBe(204);
     expect((await repos.profiles.get(target.id))?.paymentStatus).toBe("paid");
+
+    const audit = await app.inject({
+      method: "GET",
+      url: "/v1/admin/audit",
+      headers: { cookie: admin.cookie },
+    });
+    expect(audit.statusCode).toBe(200);
+    expect(audit.json().chain.valid).toBe(true);
+    expect(audit.json().entries.some((e: { action: string }) => e.action === "payments.manual_mark_paid")).toBe(true);
   });
 
   it("detects tampering of the stored audit log", async () => {
@@ -115,19 +92,19 @@ describe("admin routes + permissions middleware", () => {
     expect(res.json().chain.valid).toBe(false);
   });
 
-  it("identity reveal needs identity:reveal and a reason", async () => {
+  it("identity reveal is forbidden for consultancy", async () => {
     const { app, mailer, repos } = await createTestApp();
     await signUpAndLogin(app, mailer);
-    const ops = await signUpAndLogin(app, mailer, { email: "ops@example.com" });
-    await promote(repos, "ops@example.com", "operations_approver");
+    const cons = await signUpAndLogin(app, mailer, { email: "ops@example.com" });
+    await promote(repos, "ops@example.com", "consultancy");
     const target = (await repos.users.findByEmail("ada@example.com"))!;
     const res = await app.inject({
       method: "POST",
       url: `/v1/admin/students/${target.id}/identity/reveal`,
-      headers: { cookie: ops.cookie },
+      headers: { cookie: cons.cookie },
       payload: { reason: "verifying passport for blocked account" },
     });
-    expect(res.statusCode).toBe(403); // operations_approver only has identity:view_masked
+    expect(res.statusCode).toBe(403);
   });
 
   it("super_admin can create another admin and a consultancy with referral code", async () => {
@@ -192,10 +169,10 @@ describe("partners, legal and consultancy routes", () => {
     expect(bad.statusCode).toBe(400);
   });
 
-  it("partner redirect only to https links configured by an editor", async () => {
+  it("partner redirect only to http(s) links configured by an admin", async () => {
     const { app, mailer, repos } = await createTestApp();
     const editor = await signUpAndLogin(app, mailer, { email: "ed@example.com" });
-    await promote(repos, "ed@example.com", "content_legal_editor");
+    await promote(repos, "ed@example.com", "super_admin");
 
     const insecure = await app.inject({
       method: "PUT",
@@ -240,6 +217,205 @@ describe("partners, legal and consultancy routes", () => {
     expect(res.statusCode).toBe(200);
     // member belongs to "Other": must not see Sample's referred student
     expect(res.json().students).toHaveLength(0);
+    expect(res.json().organisation).toMatchObject({ name: "Other", code: "OTHER", link: "/r/OTHER" });
     expect(c).not.toBeNull();
+  });
+
+  it("public lookup and student referral apply work end-to-end", async () => {
+    const { app, mailer, repos } = await createTestApp();
+    repos.seedConsultancy("Delhi Partners", "DELHI");
+
+    const bad = await app.inject({ method: "GET", url: "/v1/consultancy/lookup?code=NOPE" });
+    expect(bad.json()).toEqual({ valid: false });
+
+    const ok = await app.inject({ method: "GET", url: "/v1/consultancy/lookup?code=delhi" });
+    expect(ok.json()).toMatchObject({ valid: true, name: "Delhi Partners", code: "DELHI", link: "/r/DELHI" });
+
+    const student = await signUpAndLogin(app, mailer, { email: "late-ref@example.com" });
+    const applied = await app.inject({
+      method: "POST",
+      url: "/v1/me/referral",
+      headers: { cookie: student.cookie },
+      payload: { code: "DELHI", shareProgressWithConsultancy: true },
+    });
+    expect(applied.statusCode).toBe(200);
+    expect(applied.json()).toMatchObject({
+      attributed: true,
+      shareProgressWithConsultancy: true,
+      organisation: { name: "Delhi Partners", code: "DELHI" },
+    });
+
+    const mine = await app.inject({ method: "GET", url: "/v1/me/referral", headers: { cookie: student.cookie } });
+    expect(mine.json().organisation.name).toBe("Delhi Partners");
+  });
+
+  it("admin can add a manager to a managerless consultancy", async () => {
+    const { app, mailer, repos } = await createTestApp();
+    const admin = await signUpAndLogin(app, mailer, { email: "boss@example.com" });
+    await promote(repos, "boss@example.com", "super_admin");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/admin/consultancies",
+      headers: { cookie: admin.cookie },
+      payload: { name: "Orphan Co", code: "ORPHAN" },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id as string;
+
+    const list = await app.inject({ method: "GET", url: "/v1/admin/consultancies", headers: { cookie: admin.cookie } });
+    expect(list.json().consultancies.find((c: { id: string }) => c.id === id)?.hasManager).toBe(false);
+
+    const mgr = await app.inject({
+      method: "POST",
+      url: `/v1/admin/consultancies/${id}/managers`,
+      headers: { cookie: admin.cookie },
+      payload: {
+        email: "orphan-mgr@nivo.test",
+        password: "NivoConsul1234",
+        fullName: "Orphan Manager",
+      },
+    });
+    expect(mgr.statusCode).toBe(201);
+    expect(mgr.json().manager.email).toBe("orphan-mgr@nivo.test");
+
+    const list2 = await app.inject({ method: "GET", url: "/v1/admin/consultancies", headers: { cookie: admin.cookie } });
+    expect(list2.json().consultancies.find((c: { id: string }) => c.id === id)?.hasManager).toBe(true);
+  });
+
+  it("funnel metrics, card CRUD, and copy settings work for super_admin", async () => {
+    const { app, mailer, repos } = await createTestApp();
+    const student = await signUpAndLogin(app, mailer, { email: "funnel-student@example.com" });
+    const admin = await signUpAndLogin(app, mailer, { email: "funnel-admin@example.com" });
+    await promote(repos, "funnel-admin@example.com", "super_admin");
+
+    const funnel = await app.inject({
+      method: "GET",
+      url: "/v1/admin/reports/funnel",
+      headers: { cookie: admin.cookie },
+    });
+    expect(funnel.statusCode).toBe(200);
+    expect(funnel.json().registrations).toBeGreaterThanOrEqual(1);
+    expect(funnel.json()).toMatchObject({
+      paid: expect.any(Number),
+      simUnlocked: expect.any(Number),
+      accommodationLeads: expect.any(Number),
+      pendingProofs: expect.any(Number),
+    });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/admin/cards",
+      headers: { cookie: admin.cookie },
+      payload: {
+        key: "insurance",
+        title: "Health Insurance",
+        description: "Coming soon card",
+        comingSoon: true,
+        published: true,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const unpublished = await app.inject({
+      method: "PUT",
+      url: "/v1/admin/cards/insurance",
+      headers: { cookie: admin.cookie },
+      payload: {
+        title: "Health Insurance",
+        description: "Hidden",
+        comingSoon: false,
+        published: false,
+      },
+    });
+    expect(unpublished.statusCode).toBe(200);
+
+    const studentCards = await app.inject({
+      method: "GET",
+      url: "/v1/cards",
+      headers: { cookie: student.cookie },
+    });
+    expect(studentCards.statusCode).toBe(200);
+    expect(studentCards.json().cards.some((c: { key: string }) => c.key === "insurance")).toBe(false);
+
+    await app.inject({
+      method: "PUT",
+      url: "/v1/admin/cards/insurance",
+      headers: { cookie: admin.cookie },
+      payload: {
+        title: "Health Insurance",
+        description: "Visible soon",
+        comingSoon: true,
+        published: true,
+      },
+    });
+    const studentCards2 = await app.inject({
+      method: "GET",
+      url: "/v1/cards",
+      headers: { cookie: student.cookie },
+    });
+    expect(studentCards2.json().cards.some((c: { key: string; comingSoon: boolean }) => c.key === "insurance" && c.comingSoon)).toBe(
+      true,
+    );
+
+    const texts = await app.inject({
+      method: "PUT",
+      url: "/v1/admin/settings/texts",
+      headers: { cookie: admin.cookie },
+      payload: { texts: { "commission.disclosure": "Custom disclosure text." } },
+    });
+    expect(texts.statusCode).toBe(204);
+
+    const copy = await app.inject({ method: "GET", url: "/v1/copy", headers: { cookie: student.cookie } });
+    expect(copy.statusCode).toBe(200);
+    expect(copy.json().texts["commission.disclosure"]).toBe("Custom disclosure text.");
+  });
+
+  it("legal publish, terms accept PDF, and re-accept flag on /me", async () => {
+    const { app, mailer, repos } = await createTestApp();
+    const student = await signUpAndLogin(app, mailer, { email: "legal-student@example.com" });
+    const admin = await signUpAndLogin(app, mailer, { email: "legal-admin@example.com" });
+    await promote(repos, "legal-admin@example.com", "super_admin");
+
+    const meOk = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie: student.cookie } });
+    expect(meOk.statusCode).toBe(200);
+    expect(meOk.json().termsReacceptRequired).toBe(false);
+
+    const published = await app.inject({
+      method: "PUT",
+      url: "/v1/admin/legal/publish",
+      headers: { cookie: admin.cookie },
+      payload: {
+        slug: "terms",
+        version: "2025-11-draft2",
+        title: "Terms of Service",
+        body: "Updated provisional terms body for tests.",
+      },
+    });
+    expect(published.statusCode).toBe(200);
+
+    const meStale = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie: student.cookie } });
+    expect(meStale.json().termsReacceptRequired).toBe(true);
+
+    const accept = await app.inject({
+      method: "POST",
+      url: "/v1/legal/accept",
+      headers: { cookie: student.cookie },
+      payload: { slug: "terms", version: "2025-11-draft2" },
+    });
+    expect(accept.statusCode).toBe(201);
+
+    const meFresh = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie: student.cookie } });
+    expect(meFresh.json().termsReacceptRequired).toBe(false);
+
+    const docs = await app.inject({ method: "GET", url: "/v1/documents", headers: { cookie: student.cookie } });
+    expect(docs.statusCode).toBe(200);
+    expect(docs.json().documents.some((d: { kind: string; title: string }) => d.kind === "terms_pdf" && d.title.includes("2025-11-draft2"))).toBe(
+      true,
+    );
+
+    const impressum = await app.inject({ method: "GET", url: "/v1/legal/impressum" });
+    expect(impressum.statusCode).toBe(200);
+    expect(impressum.json().slug).toBe("impressum");
   });
 });

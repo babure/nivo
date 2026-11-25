@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Field, Page } from "../components/Page";
+import { ArrowRight, Mail } from "lucide-react";
 import { Button, LinkButton } from "../components/Button";
 
 export function HowItWorks() {
@@ -10,11 +11,11 @@ export function HowItWorks() {
     ],
     [
       "Set up your blocked account",
-      "Follow the guided Sperrkonto partner path and receive the confirmation you need for your visa — tracked as a card on your dashboard.",
+      "Open your Sperrkonto with Expatrio and get the confirmation you need for your visa — tracked as a card on your dashboard.",
     ],
     [
       "Arrive and activate",
-      "Land in Germany with SIM unlock and housing next steps ready. Partner bank or insurance guidance is available when you need it — not as live bundled products in Phase 1.",
+      "Land in Germany with SIM unlock and housing next steps ready. Health insurance is available via Fintiba when you need it.",
     ],
     [
       "Find accommodation & settle in",
@@ -33,7 +34,10 @@ export function HowItWorks() {
         ))}
       </ol>
       <div className="mt-8">
-        <LinkButton to="/register">Get Started</LinkButton>
+        <LinkButton to="/register">
+          Get Started
+          <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
+        </LinkButton>
       </div>
     </Page>
   );
@@ -42,8 +46,12 @@ export function HowItWorks() {
 export function Services() {
   const items = [
     {
-      title: "Blocked Account",
-      body: "Visa-required Sperrkonto guidance: €11,904 secured, €992 released monthly through a partner. NIVO tracks the step; partner fees are separate from the €149 NIVO fee.",
+      title: "Blocked Account (Expatrio)",
+      body: "Visa-required Sperrkonto via Expatrio. NIVO tracks the step on your checklist; Expatrio fees and deposits are paid to Expatrio, separate from the €149 NIVO fee.",
+    },
+    {
+      title: "Health insurance (Fintiba)",
+      body: "Student health insurance through Fintiba. You contract and pay with Fintiba; NIVO only opens the partner path.",
     },
     {
       title: "Accommodation",
@@ -60,10 +68,6 @@ export function Services() {
     {
       title: "Student Support",
       body: "Help with questions about arriving and living in Germany, whenever you need a clear next step.",
-    },
-    {
-      title: "Bank & insurance (partner journey)",
-      body: "Guidance toward partner bank and health-insurance options when you need them. Not sold as live NIVO products in this release.",
     },
   ];
   return (
@@ -84,27 +88,27 @@ export function Faq() {
   const items = [
     [
       "What is a blocked account and why do I need it?",
-      "A Sperrkonto (blocked account) is usually required for a German student visa. You deposit funds that are released monthly. NIVO guides you through a partner path and tracks completion — the deposit and partner fees are paid to the partner, not as part of the €149 NIVO fee.",
+      "A Sperrkonto (blocked account) is usually required for a German student visa. Through NIVO you open it with Expatrio. Deposits and Expatrio fees are paid to Expatrio — not as part of the €149 NIVO fee.",
+    ],
+    [
+      "Which insurance partner do you use?",
+      "Health insurance is with Fintiba. NIVO introduces the path; you sign and pay with Fintiba.",
     ],
     [
       "How long does the setup take?",
-      "Creating a NIVO account and verifying email takes minutes. Paying the €149 fee unlocks your dashboard. Partner steps (blocked account, SIM, housing) depend on the partner and your documents.",
+      "Creating a NIVO account and verifying email takes minutes. Paying the €149 fee unlocks your dashboard. Expatrio, Fintiba, SIM and housing depend on your documents.",
     ],
     [
       "Can I use NIVO before I arrive in Germany?",
-      "Yes. Most of the journey is designed for pre-arrival: account, payment, identity onboarding, blocked-account guidance, and housing leads before you land.",
+      "Yes. Most of the journey is designed for pre-arrival: account, payment, identity onboarding, Expatrio blocked-account guidance, and housing leads before you land.",
     ],
     [
       "Which cities do you provide accommodation in?",
       "We take leads for major German student cities. Availability depends on local inventory; a NIVO agent follows up after you submit city, budget and room type.",
     ],
     [
-      "How do I get my SIM card and bank account?",
-      "SIM unlocks on your dashboard after the blocked-account step. Bank and insurance are partner journeys you can follow when ready — contracts are with those partners, not NIVO.",
-    ],
-    [
       "How much does NIVO cost?",
-      "NIVO charges a one-time €149 service fee. Partner products (blocked-account funding, SIM plans, rent, insurance) are billed by partners separately.",
+      "NIVO charges a one-time €149 service fee. Expatrio, Fintiba, SIM and rent are billed by those providers separately.",
     ],
   ];
   return (
@@ -163,6 +167,7 @@ export function Contact() {
             <textarea className="input min-h-28" value={message} onChange={(e) => setMessage(e.target.value)} required />
           </Field>
           <Button type="submit" className="w-full">
+            <Mail className="h-4 w-4 shrink-0" aria-hidden />
             Open email
           </Button>
         </form>

@@ -13,7 +13,14 @@ import type { Repositories } from "../../repositories/types.js";
 export type IdentityInput = z.infer<typeof identitySchema>;
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-export const FILE_KINDS = ["passport", "selfie", "address_proof", "completion_proof", "signature"] as const;
+export const FILE_KINDS = [
+  "passport",
+  "selfie",
+  "address_proof",
+  "completion_proof",
+  "signature",
+  "other",
+] as const;
 export type FileKind = (typeof FILE_KINDS)[number];
 
 /** Verify real content type from magic bytes — never trust the client MIME header. */
@@ -148,6 +155,62 @@ export class IdentityService {
       meta: { kind, mime, sizeBytes: data.length },
     });
     return { id, mime, sizeBytes: data.length };
+  }
+
+  async removeFile(userId: string, fileId: string): Promise<void> {
+    const file = await this.deps.repos.identity.getFile(fileId);
+    if (!file || file.userId !== userId) {
+      throw new AppError("NOT_FOUND", "File not found.");
+    }
+    const removed = await this.deps.repos.identity.deleteFile(fileId);
+    if (!removed) throw new AppError("NOT_FOUND", "File not found.");
+    await this.deps.audit.append({
+      actorId: userId,
+      action: "identity.file_deleted",
+      entityType: "identity_file",
+      entityId: fileId,
+      meta: { kind: file.kind },
+    });
+  }
+
+  /** Decrypt and return file bytes for authenticated owner View/Download. */
+  async getFileContent(
+    userId: string,
+    fileId: string,
+  ): Promise<{ body: Buffer; mime: string; kind: string; filename: string }> {
+    const file = await this.deps.repos.identity.getFile(fileId);
+    if (!file || file.userId !== userId) {
+      throw new AppError("NOT_FOUND", "File not found.");
+    }
+    return this.decryptFile(file);
+  }
+
+  /** Admin proof review: load file by id after the caller has authorised access. */
+  async getFileContentById(
+    fileId: string,
+  ): Promise<{ body: Buffer; mime: string; kind: string; filename: string; userId: string }> {
+    const file = await this.deps.repos.identity.getFile(fileId);
+    if (!file) throw new AppError("NOT_FOUND", "File not found.");
+    const decrypted = this.decryptFile(file);
+    return { ...decrypted, userId: file.userId };
+  }
+
+  private decryptFile(file: {
+    id: string;
+    mime: string;
+    kind: string;
+    blob: Parameters<typeof decryptField>[0];
+  }): { body: Buffer; mime: string; kind: string; filename: string } {
+    const b64 = decryptField(file.blob, this.key);
+    const body = Buffer.from(b64, "base64");
+    const ext =
+      file.mime === "application/pdf" ? "pdf" : file.mime === "image/png" ? "png" : "jpg";
+    return {
+      body,
+      mime: file.mime,
+      kind: file.kind,
+      filename: `${file.kind}-${file.id.slice(0, 8)}.${ext}`,
+    };
   }
 
   /** Student DSR export: masked metadata + decrypted payload (REQ-ID-04). */

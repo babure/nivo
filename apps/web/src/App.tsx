@@ -3,6 +3,7 @@ import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/guards";
 import Home from "./pages/Home";
 import { Cookies, Impressum, OurRole, Privacy, Terms, Withdrawal } from "./pages/legal/Legal";
+import { TermsReaccept } from "./pages/legal/TermsReaccept";
 import Register from "./pages/Register";
 import { ForgotPassword, Login, ResetPassword, VerifyEmail } from "./pages/AuthPages";
 import Pay from "./pages/Pay";
@@ -13,6 +14,17 @@ import AdminRoutes from "./pages/admin/AdminShell";
 import ConsultancyRoutes from "./pages/Consultancy";
 import Referral from "./pages/Referral";
 import NotFound from "./pages/NotFound";
+
+const legalRoutes = (
+  <>
+    <Route path="terms" element={<Terms />} />
+    <Route path="cookies" element={<Cookies />} />
+    <Route path="our-role" element={<OurRole />} />
+    <Route path="privacy" element={<Privacy />} />
+    <Route path="impressum" element={<Impressum />} />
+    <Route path="withdrawal" element={<Withdrawal />} />
+  </>
+);
 
 export default function App() {
   return (
@@ -25,12 +37,12 @@ export default function App() {
         <Route path="faq" element={<Navigate to={{ pathname: "/", hash: "faq" }} replace />} />
         <Route path="contact" element={<Navigate to={{ pathname: "/", hash: "about" }} replace />} />
 
-        <Route path="terms" element={<Terms />} />
-        <Route path="cookies" element={<Cookies />} />
-        <Route path="our-role" element={<OurRole />} />
-        <Route path="privacy" element={<Privacy />} />
-        <Route path="impressum" element={<Impressum />} />
-        <Route path="withdrawal" element={<Withdrawal />} />
+        {legalRoutes}
+
+        <Route path="de">
+          <Route index element={<Navigate to="/de/terms" replace />} />
+          {legalRoutes}
+        </Route>
 
         <Route path="register" element={<Register />} />
         <Route path="login" element={<Login />} />
@@ -40,6 +52,7 @@ export default function App() {
         <Route path="r/:code" element={<Referral />} />
 
         <Route element={<RequireAuth />}>
+          <Route path="legal/reaccept" element={<TermsReaccept />} />
           <Route path="pay" element={<Pay />} />
           <Route path="onboarding/identity" element={<IdentityOnboarding />} />
           <Route path="dashboard" element={<Dashboard />} />

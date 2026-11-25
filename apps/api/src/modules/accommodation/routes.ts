@@ -1,21 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { phoneSchema } from "@nivo/shared";
+import { accommodationLeadSchema } from "@nivo/shared";
 import { z } from "zod";
 import { AppError, parseStrict } from "../../lib/errors.js";
 import { LEAD_STATUSES } from "../../repositories/types.js";
 import { requireAuthContext } from "../../plugins/auth.js";
 import { requirePermission } from "../admin/permissions.js";
 
-const leadBody = z.object({
-  city: z.string().trim().min(2).max(80),
-  budget: z.string().trim().min(1).max(40),
-  roomType: z.string().trim().min(1).max(40),
-  phone: phoneSchema,
-  notes: z.string().trim().max(1000).optional(),
-});
+const leadBody = accommodationLeadSchema;
 const idParams = z.object({ id: z.string().uuid() });
-const statusBody = z.object({ status: z.enum(LEAD_STATUSES) });
+const statusBody = z.object({
+  status: z.enum(LEAD_STATUSES, {
+    errorMap: () => ({ message: "Choose a valid lead status" }),
+  }),
+});
 
 export async function accommodationRoutes(app: FastifyInstance): Promise<void> {
   const { repos, accommodation } = app.services;
@@ -68,7 +66,16 @@ export async function accommodationRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [app.requireAuth, requirePermission("leads:update_status")] },
     async (req, reply) => {
       const { id } = parseStrict(idParams, req.params);
-      const { body } = parseStrict(z.object({ body: z.string().trim().min(1).max(2000) }), req.body);
+      const { body } = parseStrict(
+        z.object({
+          body: z
+            .string()
+            .trim()
+            .min(1, "Note cannot be empty")
+            .max(2000, "Note is too long (max 2000 characters)"),
+        }),
+        req.body,
+      );
       if (!(await repos.leads.get(id))) throw new AppError("NOT_FOUND", "Lead not found.");
       await repos.leads.addNote({
         id: randomUUID(),

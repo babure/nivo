@@ -7,8 +7,9 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { apiError, type ErrorCode } from "@nivo/shared";
 import { loadConfig, type AppConfig } from "./config.js";
-import { AppError, zodDetails } from "./lib/errors.js";
+import { AppError, zodDetails, zodSummary } from "./lib/errors.js";
 import { createLogger } from "./lib/logger.js";
+import { configureObjectStorage, ensureObjectStorageReady } from "./lib/object-storage/index.js";
 import { SERVICE_CURRENCY, SERVICE_FEE_CENTS } from "@nivo/shared";
 import Stripe from "stripe";
 import { createMailer, type Mailer } from "./lib/mailer.js";
@@ -54,6 +55,8 @@ export type BuildAppOptions = {
 
 export async function buildApp(opts: BuildAppOptions = {}) {
   const config = opts.config ?? loadConfig();
+  configureObjectStorage(config);
+  await ensureObjectStorageReady();
   const repos = opts.repos ?? new InMemoryRepositories();
   const mailer = opts.mailer ?? createMailer(config);
   const logger = opts.logger ?? createLogger(config.LOG_LEVEL);
@@ -66,6 +69,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
       const charge = await resolveCheckoutCharge(stripe, {
         overrideCurrency: config.STRIPE_CHARGE_CURRENCY,
         overrideAmountCents: config.STRIPE_CHARGE_AMOUNT_CENTS,
+        matchSettlement: config.STRIPE_MATCH_SETTLEMENT,
       });
       feeCents = charge.amountCents;
       feeCurrency = charge.currency;
@@ -121,8 +125,8 @@ export async function buildApp(opts: BuildAppOptions = {}) {
     } else if (err instanceof ZodError) {
       code = "VALIDATION_FAILED";
       status = 400;
-      message = "Request validation failed.";
       details = zodDetails(err);
+      message = zodSummary(err);
     } else {
       const e = err as { statusCode?: number; code?: string };
       if (e.statusCode === 429) {

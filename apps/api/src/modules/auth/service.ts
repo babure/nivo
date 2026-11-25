@@ -21,8 +21,8 @@ import {
   type UserRecord,
 } from "../../repositories/types.js";
 
-/** `input` type: callers may omit fields that zod defaults (shareProgressWithConsultancy). */
-export type RegisterInput = z.input<typeof registerSchema>;
+/** Parsed register payload (`z.infer` — after preprocess/defaults, not raw `z.input`). */
+export type RegisterInput = z.infer<typeof registerSchema>;
 
 export type RequestContext = { ip?: string; userAgent?: string };
 
@@ -64,6 +64,7 @@ export type PublicUser = {
   id: string;
   email: string;
   fullName: string;
+  phone: string;
   emailVerified: boolean;
   role: string | null;
   totpEnabled: boolean;
@@ -77,6 +78,7 @@ export function toPublicUser(u: UserRecord): PublicUser {
     id: u.id,
     email: u.email,
     fullName: u.fullName,
+    phone: u.phone ?? "",
     emailVerified: u.emailVerifiedAt !== null,
     role: u.role,
     totpEnabled: u.totpSecret !== null,
@@ -137,7 +139,12 @@ export class AuthService {
     const existing = await repos.users.findByEmail(input.email);
     // Anti-enumeration: identical response whether or not the email is taken.
     if (existing) {
-      await mailer.send({ to: input.email, template: "already_registered" });
+      // Retry after a failed verify-email delivery: re-issue so the user can confirm.
+      if (!existing.emailVerifiedAt && existing.passwordSet) {
+        await this.issueToken(existing, "verify_email", VERIFY_TTL_MS);
+      } else {
+        await mailer.send({ to: input.email, template: "already_registered" });
+      }
       return { status: "pending_verification" };
     }
 
@@ -232,6 +239,7 @@ export class AuthService {
       referralCode?: string | null;
       termsVersion?: string | null;
       privacyVersion?: string | null;
+      shareProgressWithConsultancy?: boolean;
     } = {},
     ctx: RequestContext = {},
   ): Promise<{ user: UserRecord; sessionToken: string; expiresAt: Date; created: boolean }> {
@@ -261,9 +269,9 @@ export class AuthService {
 
     if (!user) {
       const terms =
-        opts.termsVersion ?? (await repos.legal.getPublished("terms"))?.version ?? "2025-01";
+        opts.termsVersion ?? (await repos.legal.getPublished("terms"))?.version ?? "2025-11-draft1";
       const privacy =
-        opts.privacyVersion ?? (await repos.legal.getPublished("privacy"))?.version ?? "2025-01";
+        opts.privacyVersion ?? (await repos.legal.getPublished("privacy"))?.version ?? "2025-11-draft1";
 
       const passwordHash = await hasher.hash(randomUUID());
       const newUser: UserRecord = {
@@ -292,6 +300,8 @@ export class AuthService {
         const consultancy = opts.referralCode
           ? await repos.consultancies.findByReferralCode(opts.referralCode)
           : null;
+        const share =
+          Boolean(consultancy) && opts.shareProgressWithConsultancy === true;
         await repos.profiles.upsert({
           userId: user.id,
           paymentStatus: "unpaid",
@@ -299,8 +309,18 @@ export class AuthService {
           identityComplete: false,
           consultancyId: consultancy?.id ?? null,
           referralCode: consultancy ? (opts.referralCode ?? null) : null,
-          shareProgressWithConsultancy: false,
+          shareProgressWithConsultancy: share,
         });
+        if (share) {
+          await repos.consents.add({
+            id: randomUUID(),
+            userId: user.id,
+            kind: "consultancy_share",
+            version: "1",
+            ipHash: hashIp(ctx.ip),
+            acceptedAt: now,
+          });
+        }
         const ipHash = hashIp(ctx.ip);
         await repos.consents.add({
           id: randomUUID(),
@@ -569,13 +589,124 @@ export class AuthService {
     return { created: res.created };
   }
 
-  async me(ctx: AuthContext): Promise<{ user: PublicUser; paymentStatus: string; identityComplete: boolean; permissions: readonly Permission[] }> {
+  async me(ctx: AuthContext): Promise<{
+    user: PublicUser;
+    paymentStatus: string;
+    identityComplete: boolean;
+    permissions: readonly Permission[];
+    termsReacceptRequired: boolean;
+  }> {
     const profile = await this.deps.repos.profiles.get(ctx.user.id);
+    const termsReacceptRequired = ctx.user.role
+      ? false
+      : await this.needsTermsReaccept(ctx.user.id);
     return {
       user: toPublicUser(ctx.user),
       paymentStatus: profile?.paymentStatus ?? "unpaid",
       identityComplete: profile?.identityComplete ?? false,
       permissions: ctx.permissions,
+      termsReacceptRequired,
     };
+  }
+
+  /** Students must re-accept when published Terms version drifts from latest consent. */
+  async needsTermsReaccept(userId: string): Promise<boolean> {
+    const published = await this.deps.repos.legal.getPublished("terms");
+    if (!published) return false;
+    const consents = await this.deps.repos.consents.listForUser(userId);
+    const latest = consents
+      .filter((c) => c.kind === "terms")
+      .sort((a, b) => b.acceptedAt.getTime() - a.acceptedAt.getTime())[0];
+    return !latest || latest.version !== published.version;
+  }
+
+  /** Current referral attribution for the signed-in student (never leaks other tenants). */
+  async getReferral(userId: string) {
+    const profile = await this.deps.repos.profiles.get(userId);
+    if (!profile?.consultancyId) {
+      return {
+        attributed: false as const,
+        shareProgressWithConsultancy: false,
+        organisation: null as null,
+      };
+    }
+    const org = await this.deps.repos.consultancies.findById(profile.consultancyId);
+    return {
+      attributed: true as const,
+      shareProgressWithConsultancy: profile.shareProgressWithConsultancy,
+      organisation: org
+        ? { id: org.id, name: org.name, code: org.referralCode, link: `/r/${org.referralCode}` }
+        : null,
+    };
+  }
+
+  /**
+   * Attach a student to a consultancy via referral code, or update share consent.
+   * Does not reassign once already attributed to a different org.
+   */
+  async applyReferral(
+    userId: string,
+    input: { code?: string | null; shareProgressWithConsultancy?: boolean },
+    ctx: RequestContext = {},
+  ) {
+    const user = await this.deps.repos.users.findById(userId);
+    if (!user || user.role) {
+      throw new AppError("FORBIDDEN", "Only student accounts can use referral links.");
+    }
+    const profile = await this.deps.repos.profiles.get(userId);
+    if (!profile) {
+      throw new AppError("VALIDATION_FAILED", "Complete registration first.");
+    }
+
+    let consultancyId = profile.consultancyId;
+    let referralCode = profile.referralCode;
+
+    if (input.code?.trim()) {
+      const found = await this.deps.repos.consultancies.findByReferralCode(input.code.trim());
+      if (!found) {
+        throw new AppError("NOT_FOUND", "That referral code is not recognised.");
+      }
+      if (consultancyId && consultancyId !== found.id) {
+        throw new AppError("CONFLICT", "Your account is already linked to another consultancy.");
+      }
+      consultancyId = found.id;
+      referralCode = found.referralCode;
+    }
+
+    if (!consultancyId) {
+      throw new AppError("VALIDATION_FAILED", "Enter a valid referral code first.");
+    }
+
+    const share =
+      input.shareProgressWithConsultancy === undefined
+        ? profile.shareProgressWithConsultancy
+        : Boolean(input.shareProgressWithConsultancy);
+
+    await this.deps.repos.profiles.patch(userId, {
+      consultancyId,
+      referralCode,
+      shareProgressWithConsultancy: share,
+    });
+
+    if (share && !profile.shareProgressWithConsultancy) {
+      await this.deps.repos.consents.add({
+        id: randomUUID(),
+        userId,
+        kind: "consultancy_share",
+        version: "1",
+        ipHash: hashIp(ctx.ip),
+        acceptedAt: this.now(),
+      });
+    }
+
+    await this.deps.audit.append({
+      actorId: userId,
+      action: "referral.applied",
+      entityType: "consultancy",
+      entityId: consultancyId,
+      meta: { share },
+    });
+
+    return this.getReferral(userId);
   }
 }

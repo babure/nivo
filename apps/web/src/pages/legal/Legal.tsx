@@ -1,60 +1,67 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Page } from "../../components/Page";
 import { api, ApiError } from "../../lib/api";
 
-const SLUG_BY_TITLE: Record<string, "terms" | "privacy" | "refund" | "cookies" | null> = {
+type LegalSlug = "terms" | "privacy" | "refund" | "cookies" | "impressum" | "our_role";
+
+const SLUG_BY_TITLE: Record<string, LegalSlug> = {
   "Terms & Conditions": "terms",
   "Privacy Policy": "privacy",
   "Cookie Policy": "cookies",
   "Right of Withdrawal": "refund",
-  Impressum: null,
-  "Our Role": null,
+  Impressum: "impressum",
+  "Our Role": "our_role",
 };
 
-const STATIC: Record<string, string> = {
-  Impressum: `NIVO UG (haftungsbeschränkt)
-Berlin, Germany
-
-Represented by the managing directors.
-Contact: hello@nivo.example
-
-Register court and commercial register details will be published here after counsel review.
-VAT ID (if applicable) will be listed once confirmed with our tax advisor.`,
-  "Our Role": `NIVO is a referral and support platform for international students preparing for Germany.
-
-We help you navigate blocked accounts, SIM setup, accommodation introductions and related steps through a guided dashboard.
-
-When you follow a partner link, you leave NIVO and contract directly with that partner. NIVO may receive a commission from partners; this does not increase the price you pay the partner.
-
-NIVO does not provide legal, tax or immigration advice. Always verify requirements with the relevant authorities and institutions.`,
-};
+function formatUpdated(iso?: string): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
 
 function LegalPage({ title }: { title: string }) {
+  const location = useLocation();
+  const isDe = location.pathname.startsWith("/de/") || location.pathname === "/de";
   const slug = SLUG_BY_TITLE[title];
-  const [body, setBody] = useState<string>(STATIC[title] ?? "");
+  const [body, setBody] = useState<string>("");
   const [version, setVersion] = useState<string>();
+  const [publishedAt, setPublishedAt] = useState<string>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     if (!slug) return;
     void api
-      .get<{ title: string; body: string; version: string }>(`/v1/legal/${slug}`)
+      .get<{ title: string; body: string; version: string; publishedAt?: string }>(`/v1/legal/${slug}`)
       .then((doc) => {
         setBody(doc.body);
         setVersion(doc.version);
+        setPublishedAt(doc.publishedAt);
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : "Could not load document.");
       });
   }, [slug]);
 
+  const updated = formatUpdated(publishedAt);
+  const introParts = [
+    version ? `Version ${version}` : null,
+    updated ? `Last updated ${updated}` : null,
+  ].filter(Boolean);
+
   return (
-    <Page title={title} intro={version ? `Version ${version}` : undefined}>
+    <Page title={title} intro={introParts.length ? introParts.join(" · ") : undefined}>
+      {isDe && (
+        <p className="mb-4 rounded-lg bg-mist px-3 py-2 text-sm text-charcoal-soft" role="status">
+          Deutsche Fassung folgt. English version shown for now.
+        </p>
+      )}
       {error && <p role="alert" className="mb-4 text-sm font-medium text-red-700">{error}</p>}
       <article className="surface prose prose-sm max-w-none whitespace-pre-wrap text-charcoal">
         {body || "Loading…"}
       </article>
-      <p className="mt-4 text-xs text-charcoal-soft">Draft for counsel review — not final legal advice.</p>
+      <p className="mt-4 text-xs text-charcoal-soft">Draft for counsel review — not final legal advice. Replace before go-live.</p>
     </Page>
   );
 }

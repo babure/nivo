@@ -82,6 +82,12 @@ export async function findInvoiceDocument(userId: string, invoiceNumber: string)
   return all.find((d) => d.kind === "invoice_pdf" && d.title === invoiceNumber) ?? null;
 }
 
+export async function findTermsDocument(userId: string, version: string): Promise<DocumentRecord | null> {
+  const all = await listDocumentsForUser(userId);
+  const title = `Terms ${version}`;
+  return all.find((d) => d.kind === "terms_pdf" && d.title === title) ?? null;
+}
+
 export function clearDocuments(): void {
   memory.clear();
 }

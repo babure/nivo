@@ -14,7 +14,7 @@ export function Footer() {
   const { openSettings } = useConsent();
   return (
     <footer className="border-t border-charcoal/10 bg-white/70">
-      <div className="mx-auto grid max-w-5xl gap-8 px-4 py-12 sm:grid-cols-[1.4fr_1fr] sm:px-6">
+      <div className="mx-auto grid max-w-5xl gap-6 px-4 py-10 sm:grid-cols-[1.4fr_1fr] sm:gap-8 sm:px-6 sm:py-12">
         <div>
           <p className="font-display text-lg font-bold tracking-[0.18em] text-orange">NIVO</p>
           <p className="mt-2 max-w-sm text-sm leading-relaxed text-charcoal-soft">
@@ -40,6 +40,12 @@ export function Footer() {
             >
               Cookie settings
             </button>
+            <Link
+              to="/de/terms"
+              className="inline-flex min-h-tap items-center px-2 text-sm text-charcoal-soft no-underline hover:text-orange-dark"
+            >
+              DE
+            </Link>
           </nav>
         </div>
         <p className="text-xs text-charcoal-soft sm:col-span-2">

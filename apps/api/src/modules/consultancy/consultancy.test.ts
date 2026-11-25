@@ -18,6 +18,19 @@ describe("ConsultancyService", () => {
     expect(created.link).toBe("/r/ABC");
   });
 
+  it("lookupByCode validates referral codes", async () => {
+    const repos = new InMemoryRepositories();
+    const svc = new ConsultancyService(repos);
+    await svc.create("Delhi", "DELHI");
+    expect(await svc.lookupByCode("nope")).toEqual({ valid: false });
+    expect(await svc.lookupByCode("delhi")).toMatchObject({
+      valid: true,
+      name: "Delhi",
+      code: "DELHI",
+      link: "/r/DELHI",
+    });
+  });
+
   it("consultancy cannot read foreign students via listByConsultancy", async () => {
     const repos = new InMemoryRepositories();
     const a = repos.seedConsultancy("A Co", "ACODE");

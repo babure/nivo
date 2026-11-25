@@ -22,7 +22,7 @@ export const registerInput = {
   intake: "Summer 2027",
   password: "GoodPassword1",
   ageConfirmed: true as const,
-  acceptedTermsVersion: "2025-01",
-  acceptedPrivacyVersion: "2025-01",
+  acceptedTermsVersion: "2025-11-draft1",
+  acceptedPrivacyVersion: "2025-11-draft1",
   shareProgressWithConsultancy: false,
 };

@@ -1,20 +1,27 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { registerSchema } from "@nivo/shared";
+import { PASSWORD_REQUIREMENTS, registerSchema } from "@nivo/shared";
 import { Field, FieldGrid, FormSection, Page } from "../components/Page";
+import { UserPlus } from "lucide-react";
 import { Button } from "../components/Button";
 import { GoogleSignInButton } from "../components/GoogleSignIn";
-import { api, ApiError } from "../lib/api";
+import { api, formatApiError } from "../lib/api";
+import { useToast } from "../lib/toast";
 
 /** Fallback if /v1/legal is unreachable — must match API DEFAULT_LEGAL. */
-const FALLBACK_TERMS = "2025-01";
-const FALLBACK_PRIVACY = "2025-01";
+const FALLBACK_TERMS = "2025-11-draft1";
+const FALLBACK_PRIVACY = "2025-11-draft1";
 
 type Errors = Record<string, string>;
+
+type Lookup =
+  | { valid: false }
+  | { valid: true; id: string; name: string; code: string; link: string };
 
 export default function Register() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const [termsVersion, setTermsVersion] = useState(FALLBACK_TERMS);
   const [privacyVersion, setPrivacyVersion] = useState(FALLBACK_PRIVACY);
   const [form, setForm] = useState({
@@ -27,11 +34,11 @@ export default function Register() {
     referralCode: params.get("ref") ?? "",
     ageConfirmed: false,
     accepted: false,
-    shareProgressWithConsultancy: false,
+    shareProgressWithConsultancy: Boolean(params.get("ref")),
   });
   const [errors, setErrors] = useState<Errors>({});
-  const [formError, setFormError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [referralLookup, setReferralLookup] = useState<Lookup | null>(null);
 
   useEffect(() => {
     void api
@@ -45,11 +52,38 @@ export default function Register() {
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    const code = form.referralCode.trim();
+    if (!code) {
+      setReferralLookup(null);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void api
+        .get<Lookup>(`/v1/consultancy/lookup?code=${encodeURIComponent(code)}`)
+        .then((res) => {
+          if (!cancelled) setReferralLookup(res);
+        })
+        .catch(() => {
+          if (!cancelled) setReferralLookup({ valid: false });
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [form.referralCode]);
+
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setFormError(undefined);
+    const code = form.referralCode.trim();
+    if (code && referralLookup && !referralLookup.valid) {
+      setErrors({ referralCode: "That referral code is not recognised." });
+      return;
+    }
     const parsed = registerSchema.safeParse({
       fullName: form.fullName,
       email: form.email,
@@ -60,7 +94,7 @@ export default function Register() {
       ageConfirmed: form.ageConfirmed,
       acceptedTermsVersion: form.accepted ? termsVersion : "",
       acceptedPrivacyVersion: form.accepted ? privacyVersion : "",
-      referralCode: form.referralCode || undefined,
+      referralCode: code || undefined,
       shareProgressWithConsultancy: form.shareProgressWithConsultancy,
     });
     if (!parsed.success) {
@@ -79,14 +113,27 @@ export default function Register() {
       await api.post("/v1/auth/register", parsed.data);
       navigate("/verify-email", { state: { email: parsed.data.email } });
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Something went wrong.");
+      toast.error(
+        "Could not create account",
+        formatApiError(err, "Check the form and try again."),
+      );
     } finally {
       setBusy(false);
     }
   }
 
+  const validOrg = referralLookup?.valid ? referralLookup : null;
+
   return (
-    <Page title="Create your account" intro="Start your new beginning with NIVO." narrow>
+    <Page
+      title="Create your account"
+      intro={
+        validOrg
+          ? `You’re joining via ${validOrg.name}. Start your new beginning with NIVO.`
+          : "Start your new beginning with NIVO."
+      }
+      narrow
+    >
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <FormSection title="Agreements" description="Required before we create your account.">
           <label className="flex min-h-tap items-start gap-3 text-sm">
@@ -108,6 +155,7 @@ export default function Register() {
 
         <GoogleSignInButton
           referralCode={form.referralCode.trim() || undefined}
+          shareProgressWithConsultancy={form.shareProgressWithConsultancy}
           termsVersion={termsVersion}
           privacyVersion={privacyVersion}
           requireTerms
@@ -131,25 +179,34 @@ export default function Register() {
             <Field label="Intake" hint="e.g. Winter 2027" error={errors.intake}>
               <input className="input" value={form.intake} onChange={(e) => set("intake", e.target.value)} />
             </Field>
-            <Field label="Password" hint="12+ chars, upper, lower, number" error={errors.password} className="sm:col-span-2">
+            <Field label="Password" hint={PASSWORD_REQUIREMENTS} error={errors.password} className="sm:col-span-2">
               <input className="input" type="password" autoComplete="new-password" value={form.password} onChange={(e) => set("password", e.target.value)} />
             </Field>
           </FieldGrid>
         </FormSection>
 
-        <FormSection title="Referral" description="Optional — from your consultancy link.">
-          <Field label="Referral code">
+        <FormSection title="Referral" description="Optional — from your consultancy’s join link.">
+          <Field label="Referral code" error={errors.referralCode} hint={validOrg ? `Recognised: ${validOrg.name}` : undefined}>
             <input className="input" value={form.referralCode} onChange={(e) => set("referralCode", e.target.value)} />
           </Field>
-          <label className="flex min-h-tap items-start gap-3 text-sm">
-            <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-orange" checked={form.shareProgressWithConsultancy} onChange={(e) => set("shareProgressWithConsultancy", e.target.checked)} />
-            <span>Share my progress with my consultancy.</span>
-          </label>
+          {form.referralCode.trim() && referralLookup && !referralLookup.valid && (
+            <p role="alert" className="text-xs font-medium text-red-700">That referral code is not recognised.</p>
+          )}
+          {Boolean(form.referralCode.trim()) && (
+            <label className="flex min-h-tap items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-5 w-5 shrink-0 accent-orange"
+                checked={form.shareProgressWithConsultancy}
+                onChange={(e) => set("shareProgressWithConsultancy", e.target.checked)}
+              />
+              <span>Share my progress with my consultancy.</span>
+            </label>
+          )}
         </FormSection>
 
-        {formError && <p role="alert" className="text-sm font-medium text-red-700">{formError}</p>}
-
         <Button type="submit" className="w-full" disabled={busy}>
+          <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
           {busy ? "Creating account…" : "Register with email"}
         </Button>
         <p className="text-center text-sm">

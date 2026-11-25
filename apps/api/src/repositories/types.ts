@@ -91,6 +91,8 @@ export type CardDefinition = {
   description: string;
   position: number;
   comingSoon: boolean;
+  /** When false, hidden from the student checklist. */
+  published: boolean;
 };
 
 export type IdentityRecordRow = {
@@ -217,6 +219,7 @@ export interface PaymentRepo {
 
 export interface CardRepo {
   listDefinitions(): Promise<CardDefinition[]>;
+  upsertDefinition(def: CardDefinition): Promise<CardDefinition>;
   listProgress(userId: string): Promise<{ cardKey: string; status: CardStatus }[]>;
   setProgress(userId: string, cardKey: string, status: CardStatus): Promise<void>;
   addNotifyRequest(userId: string, cardKey: string): Promise<boolean>;
@@ -228,6 +231,8 @@ export interface IdentityRepo {
   addFile(file: IdentityFileRecord): Promise<void>;
   listFiles(userId: string): Promise<IdentityFileRecord[]>;
   getFile(id: string): Promise<IdentityFileRecord | null>;
+  /** Returns false when the file id does not exist. */
+  deleteFile(id: string): Promise<boolean>;
 }
 
 export interface AuditRepo {
@@ -262,12 +267,16 @@ export interface ClickRepo {
   countByKey(): Promise<Record<string, number>>;
 }
 
+export type ConsultancyRecord = { id: string; name: string; referralCode: string };
+
 export interface ConsultancyRepo {
   create(input: { id: string; name: string; referralCode: string }): Promise<void>;
-  list(): Promise<{ id: string; name: string; referralCode: string }[]>;
-  findByReferralCode(code: string): Promise<{ id: string; name: string; referralCode?: string } | null>;
+  list(): Promise<ConsultancyRecord[]>;
+  findById(id: string): Promise<ConsultancyRecord | null>;
+  findByReferralCode(code: string): Promise<ConsultancyRecord | null>;
   getMembership(userId: string): Promise<{ consultancyId: string; role: string } | null>;
   addMember(userId: string, consultancyId: string, role?: string): Promise<void>;
+  hasMembers(consultancyId: string): Promise<boolean>;
   /** students of the consultancy who consented to progress sharing */
   listSharedStudents(consultancyId: string): Promise<string[]>;
 }

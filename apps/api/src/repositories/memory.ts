@@ -23,9 +23,10 @@ export const DEFAULT_CARDS: CardDefinition[] = [
   {
     key: "blocked_account",
     title: "Blocked Account",
-    description: "Open your German blocked account (Sperrkonto).",
+    description: "Open your German blocked account (Sperrkonto) with Expatrio.",
     position: 1,
     comingSoon: false,
+    published: true,
   },
   {
     key: "sim",
@@ -33,6 +34,7 @@ export const DEFAULT_CARDS: CardDefinition[] = [
     description: "Unlocks once the required steps are completed.",
     position: 2,
     comingSoon: false,
+    published: true,
   },
   {
     key: "accommodation",
@@ -40,6 +42,7 @@ export const DEFAULT_CARDS: CardDefinition[] = [
     description: "Find verified student housing.",
     position: 3,
     comingSoon: false,
+    published: true,
   },
   {
     key: "jobs",
@@ -47,89 +50,193 @@ export const DEFAULT_CARDS: CardDefinition[] = [
     description: "We are talking to employers and job partners. Job references will appear here soon.",
     position: 4,
     comingSoon: true,
+    published: true,
   },
 ];
+
+const LEGAL_DRAFT_BANNER =
+  "DRAFT FOR COUNSEL REVIEW — Placeholder text for product/legal iteration. Replace with counsel-approved German/English versions before go-live. Not legal advice.";
 
 export const DEFAULT_LEGAL: LegalDocumentRecord[] = [
   {
     slug: "terms",
-    version: "2025-01",
+    version: "2025-11-draft1",
     title: "Terms of Service",
-    body: `These Terms govern your use of the NIVO student platform operated by NIVO UG (Berlin).
+    body: `${LEGAL_DRAFT_BANNER}
 
-1. Service
-NIVO provides a digital dashboard and referral support for steps such as blocked account, SIM, and accommodation introductions. Partner products are contracted separately with those providers.
+These Terms of Service (“Terms”) govern access to and use of the NIVO student platform operated by NIVO UG (haftungsbeschränkt), Berlin, Germany (“NIVO”, “we”).
 
-2. Fee
-The one-time NIVO service fee unlocks the paid areas of the platform. Partner prices are charged by partners.
+1. Who we are and what we offer
+NIVO provides a guided digital dashboard and referral support for international students preparing for studies in Germany. Typical steps include blocked account (Sperrkonto), SIM setup, accommodation introductions, and related checklist items. Partner products and services (for example Expatrio, Fintiba, Vodafone, or housing partners) are offered by those third parties. When you follow a partner link you leave NIVO and contract directly with that partner.
 
-3. Account
-You must provide accurate information, keep credentials secure, and be of legal age to contract.
+2. Eligibility and account
+You must be at least 18 years old and able to enter a binding contract. You agree to provide accurate registration details (including passport name), keep login credentials confidential, and notify us of unauthorised use. We may suspend accounts that appear abusive or fraudulent.
 
-4. Acceptable use
-Do not misuse the platform, attempt unauthorised access, or upload unlawful content.
+3. NIVO service fee
+Access to paid areas of the platform requires payment of the one-time NIVO service fee shown at checkout (currently €149 unless updated). Partner prices, deposits, insurance premiums, rent, and similar costs are charged by partners under their own terms and are not included in the NIVO fee.
 
-5. Liability
-NIVO is not liable for partner performance, visa outcomes, or university decisions. Statutory rights remain unaffected.
+4. Digital service and immediate start
+Checkout may ask you to acknowledge that the digital service begins immediately. Where you request immediate performance, your statutory right of withdrawal may be limited for the portion already performed, to the extent permitted by applicable law. See the Right of Withdrawal document for details.
 
-6. Changes
-We may update these Terms; material changes may require re-acceptance.
+5. Acceptable use
+You must not misuse the platform, attempt unauthorised access, interfere with security, upload unlawful or infringing content, or use NIVO to harm others. We may remove content and restrict access where reasonably necessary.
 
-Draft for counsel review.`,
+6. Partner relationships and commissions
+NIVO may receive a commission or referral fee from partners. This does not increase the price you pay the partner for their product. NIVO does not control partner availability, onboarding decisions, or contract performance.
+
+7. No immigration, legal, or tax advice
+NIVO does not provide legal, tax, visa, or immigration advice. University admission, visa, and residence decisions remain with the competent authorities and institutions.
+
+8. Liability
+To the extent permitted by law, NIVO is not liable for partner performance, visa or university outcomes, or damages arising from incorrect information you provide. Mandatory consumer rights and liability for intent or gross negligence remain unaffected.
+
+9. Changes
+We may update these Terms. Material changes may require re-acceptance before you continue using the service.
+
+10. Contact
+Questions: hello@nivo.example (replace with production support channel).`,
     published: true,
-    publishedAt: new Date("2025-01-01T00:00:00Z"),
+    publishedAt: new Date("2025-11-01T00:00:00Z"),
   },
   {
     slug: "privacy",
-    version: "2025-01",
+    version: "2025-11-draft1",
     title: "Privacy Policy",
-    body: `This Privacy Policy explains how NIVO UG processes personal data under the GDPR.
+    body: `${LEGAL_DRAFT_BANNER}
 
-Controller: NIVO UG, Berlin. Contact: hello@nivo.example
+This Privacy Policy explains how NIVO UG (haftungsbeschränkt) (“NIVO”, “we”) processes personal data under the EU General Data Protection Regulation (GDPR) and applicable German law.
 
-Data we process: account details, payment status, encrypted identity fields, card progress, accommodation leads, and technical logs.
+1. Controller
+Controller: NIVO UG (haftungsbeschränkt), Berlin, Germany.
+Contact: hello@nivo.example (privacy inbox to be confirmed).
 
-Purposes: provide the service, payments, fraud prevention, support, and (with consent) consultancy progress sharing.
+2. Categories of data
+Account and profile data (name, email, phone, country, intake); authentication and security logs; payment status and invoice metadata; encrypted identity fields and uploaded identity/proof files; checklist/card progress; accommodation enquiry details; cookie/consent records; referral/consultancy attribution where applicable.
 
-Legal bases: contract (Art. 6(1)(b)), legitimate interests (Art. 6(1)(f)), and consent where required (Art. 6(1)(a)).
+3. Purposes and legal bases
+- Provide and secure the platform and account (Art. 6(1)(b) GDPR — contract; Art. 6(1)(f) — security).
+- Process the service fee and issue invoices (Art. 6(1)(b); legal obligations Art. 6(1)(c) where applicable).
+- Identity verification and document storage for the student path (Art. 6(1)(b) and/or consent Art. 6(1)(a) as confirmed with counsel).
+- Accommodation lead handling and partner introductions (Art. 6(1)(b)/(f)).
+- Optional progress sharing with a consultancy (consent Art. 6(1)(a)).
+- Non-essential cookies only after consent (Art. 6(1)(a)).
 
-Retention: identity and files are retained only as long as needed for the service and legal obligations; exact periods pending counsel confirmation.
+4. Recipients
+Processors (hosting, email, payment provider such as Stripe, storage) under contracts; partners only when you choose to engage them; accommodation agents for leads you submit; authorities where legally required.
 
-Rights: access, rectification, erasure, restriction, portability, and objection. You may lodge a complaint with a supervisory authority.
+5. Transfers
+If data is transferred outside the EEA, we use appropriate safeguards (e.g. SCCs) as applicable.
 
-Draft for counsel review.`,
+6. Retention
+We retain data only as long as needed for the service and legal obligations. Identity materials follow product retention rules (including a hard cap); invoice records may be kept longer where tax law requires. Exact schedules will be confirmed with counsel.
+
+7. Your rights
+Access, rectification, erasure, restriction, portability, and objection where applicable; withdraw consent without affecting prior lawful processing; lodge a complaint with a supervisory authority (e.g. Berliner Beauftragte für Datenschutz).
+
+8. Children
+The service is intended for adults (18+).`,
     published: true,
-    publishedAt: new Date("2025-01-01T00:00:00Z"),
+    publishedAt: new Date("2025-11-01T00:00:00Z"),
   },
   {
     slug: "refund",
-    version: "2025-01",
+    version: "2025-11-draft1",
     title: "Right of Withdrawal / Refunds",
-    body: `Consumers in the EU generally have a 14-day right of withdrawal for distance contracts.
+    body: `${LEGAL_DRAFT_BANNER}
 
-If you ask us to start the service immediately (checkbox at checkout), you may lose part or all of the withdrawal right for the digital service already performed, to the extent permitted by law.
+Right of withdrawal (consumers in the EU/EEA)
 
-Refund requests after activation are handled case-by-case under our refund policy and maker-checker admin controls.
+For distance contracts, consumers generally have a 14-day right of withdrawal without giving reasons.
 
-Partner fees (blocked account, SIM, rent) are outside NIVO’s fee and follow the partner’s terms.
+Digital services and immediate performance
+At checkout you may be asked to expressly request that we start the digital service immediately and to acknowledge that you may lose the right of withdrawal for services already performed once performance has begun, to the extent permitted by law (see Directive 2011/83/EU implementation in Germany).
 
-Draft for counsel review.`,
+How to withdraw
+Contact us within the withdrawal period using the contact details in the Impressum / support channel. A clear statement is sufficient. Model withdrawal form text can be provided by counsel.
+
+Refunds after activation
+Where withdrawal no longer applies or has been waived for performed digital services, refund requests are assessed case-by-case under our internal refund policy by NIVO admin staff. Statutory rights remain unaffected.
+
+Partner fees
+Blocked account deposits, insurance premiums, SIM fees, rent, and similar partner charges are outside the NIVO service fee and follow the partner’s own withdrawal and refund terms.`,
     published: true,
-    publishedAt: new Date("2025-01-01T00:00:00Z"),
+    publishedAt: new Date("2025-11-01T00:00:00Z"),
   },
   {
     slug: "cookies",
-    version: "2025-01",
+    version: "2025-11-draft1",
     title: "Cookie Policy",
-    body: `NIVO uses essential cookies for authentication (session) and security. These are required for the service to function.
+    body: `${LEGAL_DRAFT_BANNER}
 
-Optional analytics or marketing cookies are only set after consent via the cookie banner, where enabled.
+This Cookie Policy explains how NIVO uses cookies and similar technologies on the website and student platform.
 
-You can clear cookies in your browser; doing so will sign you out.
+1. Essential cookies
+We use essential cookies/storage required for authentication (session), security (e.g. CSRF), and remembering essential preferences. These are necessary for the service to function and cannot be switched off in our systems.
 
-Draft for counsel review.`,
+2. Non-essential cookies
+Analytics, marketing, or similar non-essential technologies — if introduced — are only set after you choose Accept all (or equivalent) in the cookie banner. Reject non-essential keeps essential cookies only.
+
+3. Managing choices
+Use Cookie settings in the footer to revisit your choice. You can also clear cookies in your browser; clearing session cookies will sign you out.
+
+4. More information
+See our Privacy Policy for broader processing details.`,
     published: true,
-    publishedAt: new Date("2025-01-01T00:00:00Z"),
+    publishedAt: new Date("2025-11-01T00:00:00Z"),
+  },
+  {
+    slug: "impressum",
+    version: "2025-11-draft1",
+    title: "Impressum",
+    body: `${LEGAL_DRAFT_BANNER}
+
+Information according to § 5 TMG / § 18 MStV (placeholders)
+
+NIVO UG (haftungsbeschränkt)
+[Street address — to be inserted]
+[PLZ] Berlin
+Germany
+
+Represented by the managing director(s): [Names — to be inserted]
+
+Contact
+Email: hello@nivo.example
+Phone: [to be inserted]
+
+Register entry
+Register court: [Amtsgericht — to be inserted]
+Commercial register number: [HRB — to be inserted]
+
+VAT ID
+Umsatzsteuer-Identifikationsnummer according to § 27a UStG: [to be inserted if applicable]
+
+Responsible for editorial content (§ 18 Abs. 2 MStV): [Name, address — to be inserted]
+
+Dispute resolution
+The European Commission provides a platform for online dispute resolution (OS): https://ec.europa.eu/consumers/odr/
+We are neither obliged nor willing to participate in dispute resolution proceedings before a consumer arbitration board unless required by law.`,
+    published: true,
+    publishedAt: new Date("2025-11-01T00:00:00Z"),
+  },
+  {
+    slug: "our_role",
+    version: "2025-11-draft1",
+    title: "Our Role",
+    body: `${LEGAL_DRAFT_BANNER}
+
+What NIVO does
+NIVO is a referral and support platform for international students preparing for Germany. We provide a guided checklist, document storage for your arrival path, and introductions to partners for steps such as blocked accounts (e.g. Expatrio), health insurance (e.g. Fintiba), SIM setup, and accommodation enquiries.
+
+What NIVO does not do
+We do not sell partner products ourselves as the contracting provider for those products. We do not provide legal, tax, or immigration advice. We do not guarantee visa, university, or housing outcomes.
+
+Partner contracts and commissions
+When you open a partner link or submit a housing enquiry, you interact with that partner (or accommodation agent) under their terms. NIVO may receive a commission from partners; this does not increase the price you pay the partner.
+
+Your contract with NIVO
+Your contract with NIVO covers access to the platform and related digital services against the NIVO service fee described in the Terms.`,
+    published: true,
+    publishedAt: new Date("2025-11-01T00:00:00Z"),
   },
 ];
 
@@ -160,12 +267,12 @@ export class InMemoryRepositories implements Repositories {
   legalDocs: LegalDocumentRecord[];
 
   constructor(opts: { cards?: CardDefinition[]; legal?: LegalDocumentRecord[] } = {}) {
-    this.cardDefs = opts.cards ?? DEFAULT_CARDS;
+    this.cardDefs = (opts.cards ?? DEFAULT_CARDS).map((c) => ({ ...c, published: c.published !== false }));
     this.legalDocs = [...(opts.legal ?? DEFAULT_LEGAL)];
     this.settingMap.set("partner_links", {
-      expatrio: "https://example.com/expatrio",
+      expatrio: "https://www.expatrio.com/?p=nivoug",
+      fintiba: "http://partner.fintiba.com/nivoug",
       vodafone: "https://example.com/vodafone",
-      swarajya: "https://example.com/swarajya",
     });
     this.settingMap.set("roshan.email", "roshan@example.com");
     this.settingMap.set("accommodation.notify_email", "roshan@example.com");
@@ -298,7 +405,14 @@ export class InMemoryRepositories implements Repositories {
   };
 
   cards: Repositories["cards"] = {
-    listDefinitions: async () => this.cardDefs.map((c) => ({ ...c })),
+    listDefinitions: async () => this.cardDefs.map((c) => ({ ...c, published: c.published !== false })),
+    upsertDefinition: async (def) => {
+      const next: CardDefinition = { ...def, published: def.published !== false };
+      const i = this.cardDefs.findIndex((c) => c.key === next.key);
+      if (i >= 0) this.cardDefs[i] = next;
+      else this.cardDefs.push(next);
+      return { ...next };
+    },
     listProgress: async (userId) => {
       const out: { cardKey: string; status: CardStatus }[] = [];
       for (const [k, status] of this.progress) {
@@ -325,6 +439,7 @@ export class InMemoryRepositories implements Repositories {
     addFile: async (f) => void this.files.set(f.id, { ...f }),
     listFiles: async (userId) => [...this.files.values()].filter((f) => f.userId === userId),
     getFile: async (id) => this.files.get(id) ?? null,
+    deleteFile: async (id) => this.files.delete(id),
   };
 
   audit: Repositories["audit"] = {
@@ -396,6 +511,10 @@ export class InMemoryRepositories implements Repositories {
       this.consultancyList.push({ ...input });
     },
     list: async () => this.consultancyList.map((c) => ({ ...c })),
+    findById: async (id) => {
+      const c = this.consultancyList.find((x) => x.id === id);
+      return c ? { ...c } : null;
+    },
     findByReferralCode: async (code) => {
       const c = this.consultancyList.find((x) => x.referralCode.toUpperCase() === code.toUpperCase());
       return c ? { id: c.id, name: c.name, referralCode: c.referralCode } : null;
@@ -404,6 +523,8 @@ export class InMemoryRepositories implements Repositories {
     addMember: async (userId, consultancyId, role = "owner") => {
       this.memberships.set(userId, { consultancyId, role });
     },
+    hasMembers: async (consultancyId) =>
+      [...this.memberships.values()].some((m) => m.consultancyId === consultancyId),
     listSharedStudents: async (consultancyId) =>
       [...this.profileMap.values()]
         .filter((p) => p.consultancyId === consultancyId && p.shareProgressWithConsultancy)

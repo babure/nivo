@@ -58,9 +58,14 @@ export function Layout() {
     return <Navigate to={homePathFor(user)} replace />;
   }
   if (user?.role === "admin" && consArea) {
-    // Admins may open consultancy dashboard; allow.
-  } else if (user?.role === "consultancy" && adminArea && !adminLogin) {
+    return <Navigate to="/admin/partners" replace />;
+  }
+  if (user?.role === "consultancy" && adminArea && !adminLogin) {
     return <Navigate to={homePathFor(user)} replace />;
+  }
+
+  if (user?.role === "student" && user.termsReacceptRequired && studentArea) {
+    return <Navigate to="/legal/reaccept" replace />;
   }
 
   if (user?.role === "student" && studentArea) {
@@ -82,15 +87,6 @@ export function Layout() {
   }
 
   if (user?.role === "consultancy" && consArea) {
-    return (
-      <>
-        <Outlet />
-        <CookieBanner />
-      </>
-    );
-  }
-
-  if (user?.role === "admin" && consArea) {
     return (
       <>
         <Outlet />

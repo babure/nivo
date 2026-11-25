@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
+  accommodationLeadSchema,
+  createAdminSchema,
+  createConsultancySchema,
   emailSchema,
+  formatValidationIssues,
   maskSecret,
   passportNumberSchema,
   passwordSchema,
@@ -41,6 +45,9 @@ describe("validators", () => {
 
   it("password strength", () => {
     expect(() => passwordSchema.parse("short")).toThrow();
+    expect(() => passwordSchema.parse("alllowercase1")).toThrow();
+    expect(() => passwordSchema.parse("ALLUPPERCASE1")).toThrow();
+    expect(() => passwordSchema.parse("NoNumbersHere")).toThrow();
     expect(passwordSchema.parse("GoodPassword1")).toBe("GoodPassword1");
   });
 
@@ -62,6 +69,70 @@ describe("validators", () => {
 
   it("maskSecret hides all but last 3", () => {
     expect(maskSecret("A1234567")).toBe("*****567");
+  });
+
+  it("createAdmin requires strong password", () => {
+    expect(() =>
+      createAdminSchema.parse({
+        email: "admin@nivo.test",
+        fullName: "Ada Admin",
+        password: "tooshort1A",
+      }),
+    ).toThrow();
+    expect(
+      createAdminSchema.parse({
+        email: "admin@nivo.test",
+        fullName: "Ada Admin",
+        password: "GoodPassword1",
+      }).email,
+    ).toBe("admin@nivo.test");
+  });
+
+  it("createConsultancy requires manager password with email", () => {
+    expect(() =>
+      createConsultancySchema.parse({
+        name: "Partner Org",
+        code: "PARTNER1",
+        managerEmail: "mgr@partner.test",
+      }),
+    ).toThrow();
+    expect(
+      createConsultancySchema.parse({
+        name: "Partner Org",
+        code: "PARTNER1",
+      }).name,
+    ).toBe("Partner Org");
+  });
+
+  it("accommodation lead phone must be E.164", () => {
+    expect(() =>
+      accommodationLeadSchema.parse({
+        city: "Berlin",
+        budget: "600",
+        roomType: "shared",
+        phone: "01701234567",
+      }),
+    ).toThrow();
+    expect(
+      accommodationLeadSchema.parse({
+        city: "Berlin",
+        budget: "600",
+        roomType: "shared",
+        phone: "+491701234567",
+      }).city,
+    ).toBe("Berlin");
+  });
+
+  it("formatValidationIssues is actionable", () => {
+    expect(formatValidationIssues([{ path: ["password"], message: "Use at least 12 characters" }])).toBe(
+      "password: Use at least 12 characters",
+    );
+    expect(
+      formatValidationIssues([
+        { path: ["email"], message: "Enter a valid email address" },
+        { path: ["password"], message: "Add at least one number" },
+      ]),
+    ).toMatch(/^Fix 2 fields:/);
   });
 
   it("property: passport schema accepts only 6-9 A-Z0-9", () => {

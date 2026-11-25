@@ -88,12 +88,19 @@ export function dashboardCardAvailability(input: {
   comingSoon: boolean;
 }): CardStatus {
   if (input.comingSoon) return "coming_soon";
-  if (!input.paymentPaid) return "locked";
 
   const existing = input.progress.find((p) => p.cardKey === input.cardKey);
-  if (existing && (existing.status === "in_progress" || existing.status === "completed")) {
+  // Honour stored progress (incl. admin overrides) before payment/identity gates.
+  if (
+    existing &&
+    (existing.status === "available" ||
+      existing.status === "in_progress" ||
+      existing.status === "completed")
+  ) {
     return existing.status;
   }
+
+  if (!input.paymentPaid) return "locked";
 
   // Cards 1 + 3 need payment and identity (REQ-CARD-08); identity is a one-way latch.
   if (

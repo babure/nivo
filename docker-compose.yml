@@ -17,5 +17,30 @@ services:
       timeout: 5s
       retries: 10
 
+  # S3-compatible object storage (local stand-in for Cloudflare R2).
+  # Upstream minio/minio images are archived; pgsty/silo is the maintained fork
+  # (same S3 API + MINIO_* env). Console: http://localhost:9001
+  # API: http://localhost:9000  user/pass: nivo / nivo-minio-secret
+  # Bucket `nivo` is created by the API on startup (ensureReady).
+  minio:
+    image: docker.io/pgsty/silo:latest
+    container_name: nivo-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: nivo
+      MINIO_ROOT_PASSWORD: nivo-minio-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - nivo_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+
 volumes:
   nivo_pg_data:
+  nivo_minio_data:

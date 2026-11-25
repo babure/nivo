@@ -1,40 +1,43 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { emailSchema } from "@nivo/shared";
+import { emailSchema, PASSWORD_REQUIREMENTS, passwordSchema } from "@nivo/shared";
 import { Field, Page } from "../components/Page";
+import { KeyRound, LogIn, Mail } from "lucide-react";
 import { Button } from "../components/Button";
 import { GoogleSignInButton } from "../components/GoogleSignIn";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { resolvePostLoginPath } from "../lib/navigation";
+import { useToast } from "../lib/toast";
 
 export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
   const { signIn, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
   const [needsTotp, setNeedsTotp] = useState(false);
-  const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const fromPath = (location.state as { from?: string } | null)?.from ?? "";
+  const consultancyIntent = kind === "student" && fromPath.startsWith("/consultancy");
 
   useEffect(() => {
     if (params.get("oauth") === "error") {
-      setError("Google sign-in failed. Try again or use email and password.");
+      toast.error("Google sign-in failed", "Try again or use email and password.");
     }
-  }, [params]);
+  }, [params, toast]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(undefined);
     if (!emailSchema.safeParse(email).success || !password) {
-      setError("Enter a valid email and password.");
+      toast.error("Enter a valid email and password");
       return;
     }
     if (needsTotp && !/^\d{6}$/.test(totp)) {
-      setError("Enter your 6-digit authenticator code.");
+      toast.error("Enter your 6-digit authenticator code");
       return;
     }
     setBusy(true);
@@ -47,7 +50,7 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
       const from = (location.state as { from?: string } | null)?.from;
       if (kind === "admin" && user.role !== "admin") {
         await signOut();
-        setError("This account is not an admin account.");
+        toast.error("This account is not an admin account");
         return;
       }
       if (kind === "student" && user.role === "admin") {
@@ -62,9 +65,9 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
     } catch (err) {
       if (err instanceof ApiError && err.code === "AUTH_2FA_REQUIRED") {
         setNeedsTotp(true);
-        setError("Enter your two-factor authentication code.");
+        toast.info("Two-factor required", "Enter your authenticator code.");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not sign in.");
+        toast.error("Could not sign in", formatApiError(err, "Check your email and password."));
       }
     } finally {
       setBusy(false);
@@ -73,12 +76,18 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
 
   return (
     <Page
-      title={kind === "admin" ? "Admin sign in" : "Welcome back"}
-      intro={kind === "admin" ? "Staff access to the NIVO workspace." : "Continue your arrival path."}
+      title={kind === "admin" ? "Admin sign in" : consultancyIntent ? "Consultancy sign in" : "Welcome back"}
+      intro={
+        kind === "admin"
+          ? "Staff access to the NIVO workspace."
+          : consultancyIntent
+            ? "Sign in with the manager email your admin created for your organisation."
+            : "Continue your arrival path."
+      }
       narrow
     >
       <form onSubmit={onSubmit} noValidate className="space-y-4">
-        {kind === "student" && (
+        {kind === "student" && !consultancyIntent && (
           <GoogleSignInButton next={(location.state as { from?: string } | null)?.from} />
         )}
         <Field label="Email">
@@ -99,8 +108,8 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
             />
           </Field>
         )}
-        {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
         <Button type="submit" className="w-full" disabled={busy}>
+          <LogIn className="h-4 w-4 shrink-0" aria-hidden />
           {busy ? "Signing in…" : "Log in"}
         </Button>
         {kind === "student" && (
@@ -108,9 +117,16 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
             <Link to="/forgot-password" className="inline-flex min-h-tap items-center text-orange-dark underline">
               Forgot password?
             </Link>
-            <Link to="/register" className="inline-flex min-h-tap items-center text-orange-dark underline">
-              Create an account
-            </Link>
+            {!consultancyIntent && (
+              <Link to="/register" className="inline-flex min-h-tap items-center text-orange-dark underline">
+                Create an account
+              </Link>
+            )}
+            {consultancyIntent && (
+              <p className="text-center text-xs text-charcoal-soft">
+                Need access? Ask a NIVO admin to add a manager login under Partners.
+              </p>
+            )}
           </div>
         )}
       </form>
@@ -119,15 +135,14 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
 }
 
 export function ForgotPassword() {
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string>();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(undefined);
     if (!emailSchema.safeParse(email).success) {
-      setError("Enter a valid email address.");
+      toast.error("Enter a valid email address");
       return;
     }
     try {
@@ -149,8 +164,8 @@ export function ForgotPassword() {
           <Field label="Email">
             <input className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
-          {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
           <Button type="submit" className="w-full">
+            <Mail className="h-4 w-4 shrink-0" aria-hidden />
             Send reset link
           </Button>
         </form>
@@ -161,22 +176,34 @@ export function ForgotPassword() {
 
 export function ResetPassword() {
   const location = useLocation();
+  const toast = useToast();
   const params = new URLSearchParams(location.search);
   const [token, setToken] = useState(params.get("token") ?? "");
   const [password, setPassword] = useState("");
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(undefined);
+    if (token.trim().length < 20) {
+      toast.error("Paste the full reset link or token from your email");
+      return;
+    }
+    const parsed = passwordSchema.safeParse(password);
+    if (!parsed.success) {
+      toast.error("Check the form", parsed.error.issues[0]?.message ?? PASSWORD_REQUIREMENTS);
+      return;
+    }
     setBusy(true);
     try {
-      await api.post("/v1/auth/reset-password", { token, password });
+      await api.post("/v1/auth/reset-password", { token: token.trim(), password: parsed.data });
       setDone(true);
+      toast.success("Password updated");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not reset password.");
+      toast.error(
+        "Could not reset password",
+        formatApiError(err, "Request a new link if this one expired."),
+      );
     } finally {
       setBusy(false);
     }
@@ -188,6 +215,7 @@ export function ResetPassword() {
         <div className="space-y-3">
           <p className="text-sm text-charcoal-soft">Your password was updated. Sign in with the new password.</p>
           <Link to="/login" className="btn-primary inline-flex w-full justify-center">
+            <LogIn className="h-4 w-4 shrink-0" aria-hidden />
             Sign in
           </Link>
         </div>
@@ -198,7 +226,7 @@ export function ResetPassword() {
               <input className="input" value={token} onChange={(e) => setToken(e.target.value)} required />
             </Field>
           )}
-          <Field label="New password" hint="At least 12 characters with upper, lower and a number.">
+          <Field label="New password" hint={PASSWORD_REQUIREMENTS}>
             <input
               className="input"
               type="password"
@@ -209,8 +237,8 @@ export function ResetPassword() {
               minLength={12}
             />
           </Field>
-          {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
           <Button type="submit" className="w-full" disabled={busy || token.length < 20}>
+            <KeyRound className="h-4 w-4 shrink-0" aria-hidden />
             {busy ? "Saving…" : "Update password"}
           </Button>
         </form>
@@ -221,25 +249,33 @@ export function ResetPassword() {
 
 export function VerifyEmail() {
   const location = useLocation();
+  const toast = useToast();
   const email = (location.state as { email?: string } | null)?.email;
   const linkToken = new URLSearchParams(location.search).get("token") ?? "";
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string>();
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(Boolean(linkToken));
 
   useEffect(() => {
     if (!linkToken || linkToken.length < 20) return;
     let cancelled = false;
     setBusy(true);
-    setError(undefined);
+    setFailed(false);
     void api
       .post("/v1/auth/verify-email", { token: linkToken })
       .then(() => {
-        if (!cancelled) setDone(true);
+        if (!cancelled) {
+          setDone(true);
+          toast.success("Email verified");
+        }
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Could not verify.");
+          setFailed(true);
+          toast.error(
+            "Could not verify",
+            formatApiError(err, "Request a new link if this one expired."),
+          );
         }
       })
       .finally(() => {
@@ -248,7 +284,7 @@ export function VerifyEmail() {
     return () => {
       cancelled = true;
     };
-  }, [linkToken]);
+  }, [linkToken, toast]);
 
   return (
     <Page
@@ -268,20 +304,21 @@ export function VerifyEmail() {
         <div className="space-y-3">
           <p className="text-sm text-charcoal-soft">Email verified. Sign in to continue to payment.</p>
           <Link to="/login" className="btn-primary inline-flex w-full justify-center">
+            <LogIn className="h-4 w-4 shrink-0" aria-hidden />
             Sign in
           </Link>
         </div>
       ) : (
         <div className="space-y-3">
-          {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
           {!busy && !linkToken && (
             <p className="text-sm text-charcoal-soft">
               Didn’t get it? Check spam, or try registering again after a minute.
             </p>
           )}
           {busy && <p className="text-sm text-charcoal-soft">Confirming your email…</p>}
-          {error && (
+          {failed && (
             <Link to="/login" className="btn-secondary inline-flex w-full justify-center">
+              <LogIn className="h-4 w-4 shrink-0" aria-hidden />
               Back to sign in
             </Link>
           )}

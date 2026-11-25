@@ -6,12 +6,14 @@ export type NavUser = {
   role: AppRole;
   paymentStatus: string;
   identityComplete: boolean;
+  termsReacceptRequired?: boolean;
 };
 
 /** Canonical home after login (or when bouncing off a wrong-area URL). */
 export function homePathFor(user: NavUser): string {
-  if (user.role === "admin") return "/admin/students";
+  if (user.role === "admin") return "/admin/dashboard";
   if (user.role === "consultancy") return "/consultancy/dashboard";
+  if (user.termsReacceptRequired) return "/legal/reaccept";
   if (user.paymentStatus !== "paid") return "/pay";
   if (!user.identityComplete) return "/onboarding/identity";
   return "/dashboard";
@@ -32,6 +34,20 @@ export function isStudentAppPath(pathname: string): boolean {
     pathname === "/documents" ||
     pathname === "/profile" ||
     pathname.startsWith("/onboarding/")
+  );
+}
+
+/** Student routes allowed while Terms re-accept is required. */
+export function isTermsReacceptAllowedPath(pathname: string): boolean {
+  return (
+    pathname === "/legal/reaccept" ||
+    pathname === "/terms" ||
+    pathname === "/privacy" ||
+    pathname === "/withdrawal" ||
+    pathname === "/cookies" ||
+    pathname === "/impressum" ||
+    pathname === "/our-role" ||
+    pathname.startsWith("/de/")
   );
 }
 

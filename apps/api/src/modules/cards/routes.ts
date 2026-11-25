@@ -2,12 +2,18 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { parseStrict } from "../../lib/errors.js";
 import { requireAuthContext } from "../../plugins/auth.js";
+import { UI_COPY_SETTING, mergeUiCopy } from "../copy/defaults.js";
 
 const keyParams = z.object({ key: z.string().regex(/^[a-z0-9_]{1,64}$/) });
 const statusBody = z.object({ status: z.enum(["in_progress", "completed"]) });
 
 export async function cardsRoutes(app: FastifyInstance): Promise<void> {
-  const { cards } = app.services;
+  const { cards, repos } = app.services;
+
+  app.get("/v1/copy", { preHandler: app.requireAuth }, async () => {
+    const stored = await repos.settings.get<Record<string, string>>(UI_COPY_SETTING);
+    return { texts: mergeUiCopy(stored) };
+  });
 
   app.get("/v1/cards", { preHandler: app.requireAuth }, async (req) => {
     return { cards: await cards.list(requireAuthContext(req).user.id) };
@@ -27,6 +33,6 @@ export async function cardsRoutes(app: FastifyInstance): Promise<void> {
   app.post("/v1/cards/:key/notify", { preHandler: app.requireAuth }, async (req, reply) => {
     const { key } = parseStrict(keyParams, req.params);
     const { created } = await cards.requestNotify(requireAuthContext(req).user.id, key);
-    return reply.code(created ? 201 : 200).send({ status: "subscribed" });
+    return reply.code(created ? 201 : 200).send({ status: "subscribed", created });
   });
 }

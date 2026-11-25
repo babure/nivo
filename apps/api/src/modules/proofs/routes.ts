@@ -26,6 +26,17 @@ export async function proofsRoutes(app: FastifyInstance): Promise<void> {
     const buf = await file.toBuffer();
     const saved = await identity.addFile(user.id, "completion_proof", buf);
     const proof = await createProof({ userId: user.id, cardKey: key, fileId: saved.id });
+
+    // Move card into progress so the dashboard reflects the upload.
+    try {
+      const view = await cards.statusOf(user.id, key);
+      if (view.status === "available") {
+        await cards.setStatus(user.id, key, "in_progress");
+      }
+    } catch {
+      /* card may be unknown / locked — proof is still stored */
+    }
+
     await audit.append({
       actorId: user.id,
       action: "proofs.uploaded",
@@ -36,14 +47,64 @@ export async function proofsRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(proof);
   });
 
+  /** Student: own proofs (for dashboard pending / rejected state). */
+  app.get("/v1/me/proofs", { preHandler: app.requireAuth }, async (req) => {
+    const { user } = requireAuthContext(req);
+    const proofs = await listProofs({ userId: user.id });
+    return {
+      proofs: proofs.map((p) => ({
+        id: p.id,
+        cardKey: p.cardKey,
+        status: p.status,
+        createdAt: p.createdAt,
+      })),
+    };
+  });
+
   app.get("/v1/admin/proofs", { preHandler: [app.requireAuth, requirePermission("proofs:approve")] }, async (req) => {
     const status = (req.query as { status?: string }).status;
     const filter =
       status === "pending" || status === "approved" || status === "rejected"
         ? { status: status as "pending" | "approved" | "rejected" }
         : { status: "pending" as const };
-    return { proofs: await listProofs(filter) };
+    const proofs = await listProofs(filter);
+    const users = await repos.users.list();
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return {
+      proofs: proofs.map((p) => {
+        const student = byId.get(p.userId);
+        return {
+          ...p,
+          studentEmail: student?.email ?? null,
+          studentFullName: student?.fullName ?? null,
+        };
+      }),
+    };
   });
+
+  /** Admin: view / download the uploaded proof file. */
+  app.get(
+    "/v1/admin/proofs/:id/file",
+    { preHandler: [app.requireAuth, requirePermission("proofs:approve")] },
+    async (req, reply) => {
+      const { id } = parseStrict(idParams, req.params);
+      const proof = await getProof(id);
+      if (!proof) throw new AppError("NOT_FOUND", "Proof not found.");
+      if (!proof.fileId) throw new AppError("NOT_FOUND", "This proof has no file.");
+
+      const file = await identity.getFileContentById(proof.fileId);
+      if (file.userId !== proof.userId) {
+        throw new AppError("NOT_FOUND", "Proof file not found.");
+      }
+
+      const disposition = (req.query as { download?: string }).download === "1" ? "attachment" : "inline";
+      return reply
+        .header("Content-Type", file.mime)
+        .header("Content-Disposition", `${disposition}; filename="${file.filename}"`)
+        .header("Cache-Control", "private, no-store")
+        .send(file.body);
+    },
+  );
 
   app.post(
     "/v1/admin/proofs/:id/decide",

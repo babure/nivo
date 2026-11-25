@@ -11,8 +11,8 @@ test.describe("student journey (acceptance placeholders)", () => {
 
 test.describe("admin (acceptance placeholders)", () => {
   test.fixme("admin nav only shows items allowed by permissions", async () => {});
-  test.fixme("approver cannot approve own request (maker-checker)", async () => {});
-  test.fixme("support role cannot reveal identity data", async () => {});
+  test.fixme("consultancy cannot access admin students", async () => {});
+  test.fixme("admin can mark student paid immediately", async () => {});
 });
 
 test.describe("consent (acceptance placeholders)", () => {
