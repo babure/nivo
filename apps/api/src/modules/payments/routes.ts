@@ -64,19 +64,31 @@ export function paymentsRoutes(opts: PaymentsRoutesOptions = {}) {
       opts.createCheckoutSession ??
       (stripeApi
         ? async ({ userId, email }: { userId: string; email: string }) => {
+            const charge = app.checkoutFee;
+            // Do not set payment_method_types — that forces cards-only and blocks Adaptive Pricing.
             const session = await stripeApi.checkout.sessions.create({
               mode: "payment",
               customer_email: email,
               client_reference_id: userId,
-              metadata: { userId },
+              metadata: {
+                userId,
+                listCurrency: SERVICE_CURRENCY,
+                listAmountCents: String(SERVICE_FEE_CENTS),
+              },
               payment_intent_data: { metadata: { userId } },
+              adaptive_pricing: { enabled: true },
               line_items: [
                 {
                   quantity: 1,
                   price_data: {
-                    currency: SERVICE_CURRENCY,
-                    unit_amount: SERVICE_FEE_CENTS,
-                    product_data: { name: "NIVO service fee" },
+                    currency: charge.currency,
+                    unit_amount: charge.amountCents,
+                    product_data: {
+                      name: "NIVO service fee",
+                      ...(charge.currency !== SERVICE_CURRENCY
+                        ? { description: `Listed as €${(SERVICE_FEE_CENTS / 100).toFixed(0)}` }
+                        : {}),
+                    },
                   },
                 },
               ],
@@ -88,8 +100,16 @@ export function paymentsRoutes(opts: PaymentsRoutesOptions = {}) {
           }
         : null);
 
+    const checkoutConsentBody = z.object({
+      termsVersion: z.string().min(1).max(40),
+      withdrawalVersion: z.string().min(1).max(40),
+      immediateStart: z.literal(true),
+    });
+
     app.post("/v1/payments/checkout", { preHandler: app.requireAuth }, async (req, reply) => {
       const { user } = requireAuthContext(req);
+      const consent = parseStrict(checkoutConsentBody, req.body ?? {});
+      await services.payments.recordCheckoutConsents(user.id, consent, req.ip);
       if (createSession) {
         await services.payments.markProcessing(user.id);
         const { url } = await createSession({ userId: user.id, email: user.email });
@@ -145,6 +165,11 @@ export function paymentsRoutes(opts: PaymentsRoutesOptions = {}) {
     app.post("/v1/payments/simulate", { preHandler: app.requireAuth }, async (req, reply) => {
       if (config.isProd) throw new AppError("FORBIDDEN", "Demo payment is not available in production.");
       const { user } = requireAuthContext(req);
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      if (body.termsVersion || body.withdrawalVersion || body.immediateStart) {
+        const consent = parseStrict(checkoutConsentBody, body);
+        await services.payments.recordCheckoutConsents(user.id, consent, req.ip);
+      }
       await services.payments.markPaidManually(
         user.id,
         user.id,

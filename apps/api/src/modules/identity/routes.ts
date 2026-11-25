@@ -20,6 +20,10 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(204).send();
   });
 
+  app.get("/v1/identity/export", { preHandler: app.requireAuth }, async (req) => {
+    return identity.exportForUser(requireAuthContext(req).user.id);
+  });
+
   app.post(
     "/v1/identity/files",
     { preHandler: app.requireAuth, config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },

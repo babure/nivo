@@ -30,6 +30,21 @@ export async function accommodationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  /** Student: own leads + status (REQ-ACC-05). */
+  app.get("/v1/accommodation/mine", { preHandler: app.requireAuth }, async (req) => {
+    const leads = await accommodation.listMine(requireAuthContext(req).user.id);
+    return { leads };
+  });
+
+  app.post(
+    "/v1/accommodation/leads/:id/withdraw",
+    { preHandler: app.requireAuth },
+    async (req) => {
+      const { id } = parseStrict(idParams, req.params);
+      return accommodation.withdraw(requireAuthContext(req).user.id, id);
+    },
+  );
+
   app.get(
     "/v1/accommodation/leads",
     { preHandler: [app.requireAuth, requirePermission("leads:read")] },

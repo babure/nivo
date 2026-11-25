@@ -95,7 +95,11 @@ export function dashboardCardAvailability(input: {
     return existing.status;
   }
 
-  if (input.cardKey === "blocked_account" && !input.identityComplete) {
+  // Cards 1 + 3 need payment and identity (REQ-CARD-08); identity is a one-way latch.
+  if (
+    (input.cardKey === "blocked_account" || input.cardKey === "accommodation") &&
+    !input.identityComplete
+  ) {
     return "locked";
   }
 
@@ -109,7 +113,6 @@ export function dashboardCardAvailability(input: {
     });
   }
 
-  // accommodation and blocked_account (with identity): available after pay
   if (input.cardKey === "blocked_account" || input.cardKey === "accommodation") {
     return "available";
   }

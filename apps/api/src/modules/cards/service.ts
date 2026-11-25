@@ -8,6 +8,7 @@ import {
 } from "@nivo/shared";
 import { AppError } from "../../lib/errors.js";
 import type { AuditLogger } from "../../lib/audit.js";
+import type { Mailer } from "../../lib/mailer.js";
 import type { Repositories } from "../../repositories/types.js";
 
 export const SIM_RULES_SETTING = "sim_unlock_rules";
@@ -28,7 +29,9 @@ export type CardView = {
 export const STUDENT_SETTABLE: readonly CardStatus[] = ["in_progress", "completed"];
 
 export class CardsService {
-  constructor(private readonly deps: { repos: Repositories; audit: AuditLogger }) {}
+  constructor(
+    private readonly deps: { repos: Repositories; audit: AuditLogger; mailer?: Mailer },
+  ) {}
 
   async requiredForSim(): Promise<string[]> {
     const stored = await this.deps.repos.settings.get<string[]>(SIM_RULES_SETTING);
@@ -68,6 +71,21 @@ export class CardsService {
     });
     if (next !== stored) {
       await this.deps.repos.cards.setProgress(userId, "sim", next);
+      // REQ-CARD-10: queue SIM unlocked email once when transitioning into unlocked states.
+      if (stored === "locked" && (next === "available" || next === "in_progress" || next === "completed")) {
+        const user = await this.deps.repos.users.findById(userId);
+        const mailer = this.deps.mailer;
+        if (user && mailer) {
+          const flagKey = `sim_unlocked_emailed:${userId}`;
+          const already = await this.deps.repos.settings.get<boolean>(flagKey);
+          if (!already) {
+            await this.deps.repos.settings.set(flagKey, true, null);
+            void mailer
+              .send({ to: user.email, template: "sim_unlocked", vars: { fullName: user.fullName } })
+              .catch(() => undefined);
+          }
+        }
+      }
     }
   }
 

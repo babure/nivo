@@ -31,8 +31,14 @@ export const PERMISSIONS = [
 
 export type Permission = (typeof PERMISSIONS)[number];
 
+/**
+ * Product roles in Phase 1: `super_admin`, `consultancy` (students have role=null).
+ * Extra keys remain for permission-unit tests only — they are not seeded or UI-mapped.
+ */
 export const DEFAULT_ROLES: Record<string, readonly Permission[]> = {
   super_admin: PERMISSIONS,
+  consultancy: ["consultancies:manage", "students:read", "exports:students"],
+  // Legacy fine-grained keys kept for existing permission unit tests:
   operations_approver: [
     "students:read",
     "students:mark_paid",

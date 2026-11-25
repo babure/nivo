@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { CARD_STATUSES, hasPermission, type Permission } from "@nivo/shared";
 import { Login } from "../AuthPages";
 import { Field, Page } from "../../components/Page";
 import { Button } from "../../components/Button";
 import { PermissionGate } from "../../components/guards";
+import { WorkspaceShell } from "../../components/WorkspaceShell";
 import { api, ApiError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 
@@ -23,39 +24,34 @@ function AdminLayout() {
   const perms = user?.permissions ?? [];
   const visible = ADMIN_SECTIONS.filter((s) => hasPermission(perms, s.permission));
 
-  if (!ready) return <p className="p-8 text-center text-sm">Checking your session…</p>;
+  if (!ready) return <p className="p-8 text-center text-sm text-charcoal-soft">Checking your session…</p>;
   if (!user || user.role !== "admin") return <Navigate to="/admin/login" replace />;
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Admin</h1>
-        <button type="button" className="btn-secondary" onClick={() => void signOut()}>
-          Log out
-        </button>
-      </div>
-      <nav aria-label="Admin" className="-mx-1 mt-4 flex gap-1 overflow-x-auto pb-1">
-        {visible.map((s) => (
-          <NavLink
-            key={s.path}
-            to={`/admin/${s.path}`}
-            className={({ isActive }) =>
-              `inline-flex min-h-tap shrink-0 items-center rounded-xl px-4 text-sm font-medium no-underline ${
-                isActive ? "bg-orange text-white" : "bg-white/70 text-charcoal hover:bg-white"
-              }`
-            }
+    <WorkspaceShell
+      brandHref="/admin/students"
+      eyebrow="Admin"
+      title="Admin"
+      nav={visible.map((s) => ({
+        to: `/admin/${s.path}`,
+        label: s.label,
+        description: s.description,
+      }))}
+      userSlot={
+        <div className="space-y-2">
+          <p className="truncate px-1 text-xs text-charcoal-soft">{user.email}</p>
+          <button
+            type="button"
+            className="text-sm font-medium text-charcoal-soft underline-offset-4 hover:text-charcoal hover:underline"
+            onClick={() => void signOut()}
           >
-            {s.label}
-          </NavLink>
-        ))}
-        {visible.length === 0 && (
-          <p className="text-sm text-charcoal-soft">No sections available for your role.</p>
-        )}
-      </nav>
-      <div className="mt-6">
-        <Outlet />
-      </div>
-    </div>
+            Log out
+          </button>
+        </div>
+      }
+    >
+      <Outlet />
+    </WorkspaceShell>
   );
 }
 

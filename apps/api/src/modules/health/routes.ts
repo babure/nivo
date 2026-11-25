@@ -10,22 +10,28 @@ export function healthRoutes(deps: HealthDeps = {}) {
   return async function register(app: FastifyInstance): Promise<void> {
     const version = deps.version ?? process.env.npm_package_version ?? "0.0.1";
 
-    // Liveness: process is up. No dependencies touched.
-    app.get("/health", async () => ({
+    const live = async () => ({
       status: "ok",
       service: "nivo-api",
       version,
       uptimeSeconds: Math.round(process.uptime()),
-    }));
+    });
 
-    // Readiness: dependencies reachable.
-    app.get("/health/ready", async (_req, reply) => {
+    // Liveness aliases (LLD uses /healthz).
+    app.get("/health", live);
+    app.get("/healthz", live);
+
+    const ready = async (_req: unknown, reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => {
       const dbUp = deps.dbCheck ? await deps.dbCheck() : null;
-      const ready = dbUp !== false;
-      return reply.code(ready ? 200 : 503).send({
-        status: ready ? "ready" : "degraded",
+      const ok = dbUp !== false;
+      return reply.code(ok ? 200 : 503).send({
+        status: ok ? "ready" : "degraded",
         checks: { database: dbUp === null ? "in-memory" : dbUp ? "up" : "down" },
       });
-    });
+    };
+
+    // Readiness aliases (LLD uses /readyz).
+    app.get("/health/ready", ready);
+    app.get("/readyz", ready);
   };
 }

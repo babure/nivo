@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { SERVICE_CURRENCY, SERVICE_FEE_CENTS } from "@nivo/shared";
 import type { AppConfig } from "../config.js";
-import { createApproval } from "../modules/admin/approvals-store.js";
 import { createArgon2Hasher } from "../modules/auth/service.js";
-import type { InMemoryRepositories } from "../repositories/memory.js";
+import { InMemoryRepositories } from "../repositories/memory.js";
+import { PostgresRepositories } from "../repositories/postgres.js";
+import type { Repositories } from "../repositories/types.js";
 import type { Services } from "../services.js";
+
+type SeedRepos = (InMemoryRepositories | PostgresRepositories) & Repositories;
 
 /** Shared password for every seeded account (dev only). */
 export const SEED_PASSWORD = "NivoTest1234";
@@ -31,13 +33,6 @@ export const SEED_IDS = {
   },
   staff: {
     superAdmin: "b0000001-0000-4000-8000-000000000001",
-    ops: "b0000001-0000-4000-8000-000000000002",
-    support: "b0000001-0000-4000-8000-000000000003",
-    finance: "b0000001-0000-4000-8000-000000000004",
-    content: "b0000001-0000-4000-8000-000000000005",
-    agent: "b0000001-0000-4000-8000-000000000006",
-    consultancyMgr: "b0000001-0000-4000-8000-000000000007",
-    auditor: "b0000001-0000-4000-8000-000000000008",
   },
   consultancyUsers: {
     berlinMember: "c0000001-0000-4000-8000-000000000001",
@@ -119,56 +114,7 @@ export const SEED_ACCOUNTS: SeedAccount[] = [
     email: "admin@nivo.test",
     fullName: "Ada Superadmin",
     role: "super_admin",
-    flow: "Admin — all permissions → /admin",
-  },
-  {
-    id: SEED_IDS.staff.ops,
-    email: "ops@nivo.test",
-    fullName: "Omar Ops",
-    role: "operations_approver",
-    flow: "Admin — mark paid / card status / approvals",
-  },
-  {
-    id: SEED_IDS.staff.support,
-    email: "support@nivo.test",
-    fullName: "Sara Support",
-    role: "support",
-    flow: "Admin — students + leads read-only",
-  },
-  {
-    id: SEED_IDS.staff.finance,
-    email: "finance@nivo.test",
-    fullName: "Finn Finance",
-    role: "finance",
-    flow: "Admin — payments / refunds / exports",
-  },
-  {
-    id: SEED_IDS.staff.content,
-    email: "content@nivo.test",
-    fullName: "Cara Content",
-    role: "content_legal_editor",
-    flow: "Admin — settings / legal / cards",
-  },
-  {
-    id: SEED_IDS.staff.agent,
-    email: "agent@nivo.test",
-    fullName: "Alex Agent",
-    role: "accommodation_agent",
-    flow: "Admin — accommodation leads only",
-  },
-  {
-    id: SEED_IDS.staff.consultancyMgr,
-    email: "cons-mgr@nivo.test",
-    fullName: "Maya Consmanager",
-    role: "consultancy_manager",
-    flow: "Admin — consultancy management",
-  },
-  {
-    id: SEED_IDS.staff.auditor,
-    email: "auditor@nivo.test",
-    fullName: "Ava Auditor",
-    role: "auditor",
-    flow: "Admin — audit / reports",
+    flow: "Super admin — full ops → /admin",
   },
   {
     id: SEED_IDS.consultancyUsers.berlinMember,
@@ -191,9 +137,9 @@ function formatSeedTable(): string {
       (a) => `  ${a.email.padEnd(24)} ${a.id}  ${a.flow}`,
     ),
     "",
-    "STAFF (login at /admin/login)",
-    ...SEED_ACCOUNTS.filter((a) => a.role && a.role !== "consultancy").map(
-      (a) => `  ${a.email.padEnd(24)} ${a.id}  role=${a.role}`,
+    "SUPER ADMIN (login at /admin/login)",
+    ...SEED_ACCOUNTS.filter((a) => a.role === "super_admin").map(
+      (a) => `  ${a.email.padEnd(24)} ${a.id}  ${a.flow}`,
     ),
     "",
     "CONSULTANCY",
@@ -215,7 +161,7 @@ function formatSeedTable(): string {
 }
 
 async function createUser(
-  repos: InMemoryRepositories,
+  repos: SeedRepos,
   passwordHash: string,
   account: SeedAccount,
   now: Date,
@@ -230,6 +176,9 @@ async function createUser(
     passwordHash,
     emailVerifiedAt: account.verified === false ? null : now,
     role: account.role,
+    googleSub: null,
+    avatarUrl: null,
+    passwordSet: true,
     totpSecret: null,
     failedLoginCount: 0,
     lockedUntil: null,
@@ -239,7 +188,7 @@ async function createUser(
 }
 
 async function studentProfile(
-  repos: InMemoryRepositories,
+  repos: SeedRepos,
   userId: string,
   patch: {
     paymentStatus?: "unpaid" | "paid";
@@ -282,22 +231,9 @@ async function markPaidWithInvoice(
   services: Services,
   userId: string,
   actorId: string,
-  now: Date,
+  _now: Date,
 ): Promise<void> {
   await services.payments.markPaidManually(userId, actorId, "Dev seed: mark paid for navigation.");
-  const payments = await services.repos.payments.listForUser(userId);
-  const latest = payments[payments.length - 1];
-  if (!latest) return;
-  const invoiceNumber = await services.repos.payments.nextInvoiceNumber(now.getUTCFullYear());
-  await services.repos.payments.createInvoice({
-    id: randomUUID(),
-    number: invoiceNumber,
-    userId,
-    paymentId: latest.id,
-    amountCents: SERVICE_FEE_CENTS,
-    currency: SERVICE_CURRENCY,
-    issuedAt: now,
-  });
 }
 
 async function saveIdentity(services: Services, userId: string, fullName: string, passport: string): Promise<void> {
@@ -341,7 +277,7 @@ async function completeCard(services: Services, userId: string, cardKey: string,
 export async function seedDevData(
   services: Services,
   config: AppConfig,
-  repos: InMemoryRepositories,
+  repos: SeedRepos,
 ): Promise<string> {
   const existing = await repos.users.findByEmail("admin@nivo.test");
   if (existing) return formatSeedTable();
@@ -358,11 +294,11 @@ export async function seedDevData(
   }
 
   // Consultancies + membership
-  repos.seedConsultancy("Berlin Edu Hub", "BERLINEDU", SEED_IDS.consultancyUsers.berlinMember, {
+  await repos.seedConsultancy("Berlin Edu Hub", "BERLINEDU", SEED_IDS.consultancyUsers.berlinMember, {
     id: SEED_IDS.consultancies.berlinEdu,
     memberRole: "owner",
   });
-  repos.seedConsultancy("Mumbai Path", "MUMBAIPATH", undefined, {
+  await repos.seedConsultancy("Mumbai Path", "MUMBAIPATH", undefined, {
     id: SEED_IDS.consultancies.mumbaiPath,
   });
 
@@ -456,7 +392,7 @@ export async function seedDevData(
   await repos.leads.addNote({
     id: randomUUID(),
     leadId: SEED_IDS.leads.munichStudio,
-    authorId: SEED_IDS.staff.agent,
+    authorId: adminId,
     body: "Called student — viewing scheduled next week.",
     createdAt: now,
   });
@@ -475,15 +411,6 @@ export async function seedDevData(
     at: now,
   });
   await repos.requests.addDeletionRequest(SEED_IDS.students.unpaid, now);
-
-  // Sample pending approval for Approvals UI (finance → ops/super can decide)
-  createApproval({
-    action: "students:mark_paid",
-    requesterId: SEED_IDS.staff.finance,
-    requesterEmail: "finance@nivo.test",
-    targetUserId: SEED_IDS.students.unpaid,
-    reason: "Seed sample: bank transfer claimed for unpaid student.",
-  });
 
   await services.audit.append({
     actorId: adminId,

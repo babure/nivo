@@ -1,5 +1,17 @@
 const API_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
 
+let csrfToken: string | null = null;
+
+export function setCsrfToken(token: string | null) {
+  csrfToken = token;
+}
+
+function readCsrfCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)(?:__Host-)?nivo_csrf=([^;]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -15,6 +27,10 @@ export class ApiError extends Error {
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  const csrf = csrfToken ?? readCsrfCookie();
+  if (csrf && method !== "GET" && method !== "HEAD") {
+    headers["X-CSRF-Token"] = csrf;
+  }
 
   let res: Response;
   try {

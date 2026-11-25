@@ -42,6 +42,14 @@ export function ConsentProvider({ children }: { children: ReactNode }) {
       savedAt: new Date().toISOString(),
     };
     localStorage.setItem(KEY, JSON.stringify(next));
+    // Mirror to cookie for server-side / TDDDG inventory alignment (__Host-nivo_consent in prod hosts).
+    try {
+      const secure = typeof location !== "undefined" && location.protocol === "https:";
+      const name = secure ? "__Host-nivo_consent" : "nivo_consent";
+      document.cookie = `${name}=${encodeURIComponent(JSON.stringify({ choice: next.choice, analytics: next.analytics, marketing: next.marketing }))}; Path=/; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
+    } catch {
+      /* ignore cookie failures */
+    }
     setConsent(next);
     setBannerOpen(false);
   }, []);

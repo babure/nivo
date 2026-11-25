@@ -13,7 +13,7 @@ import type { Repositories } from "../../repositories/types.js";
 export type IdentityInput = z.infer<typeof identitySchema>;
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-export const FILE_KINDS = ["passport", "selfie", "address_proof"] as const;
+export const FILE_KINDS = ["passport", "selfie", "address_proof", "completion_proof", "signature"] as const;
 export type FileKind = (typeof FILE_KINDS)[number];
 
 /** Verify real content type from magic bytes — never trust the client MIME header. */
@@ -148,5 +148,35 @@ export class IdentityService {
       meta: { kind, mime, sizeBytes: data.length },
     });
     return { id, mime, sizeBytes: data.length };
+  }
+
+  /** Student DSR export: masked metadata + decrypted payload (REQ-ID-04). */
+  async exportForUser(userId: string): Promise<{
+    exportedAt: string;
+    identity: IdentityInput | null;
+    files: { id: string; kind: string; mime: string; sizeBytes: number; sha256: string; createdAt: string }[];
+  }> {
+    const [row, files] = await Promise.all([
+      this.deps.repos.identity.get(userId),
+      this.deps.repos.identity.listFiles(userId),
+    ]);
+    await this.deps.audit.append({
+      actorId: userId,
+      action: "identity.exported",
+      entityType: "user",
+      entityId: userId,
+    });
+    return {
+      exportedAt: this.now().toISOString(),
+      identity: row ? (JSON.parse(decryptField(row.payload, this.key)) as IdentityInput) : null,
+      files: files.map((f) => ({
+        id: f.id,
+        kind: f.kind,
+        mime: f.mime,
+        sizeBytes: f.sizeBytes,
+        sha256: f.sha256,
+        createdAt: f.createdAt.toISOString(),
+      })),
+    };
   }
 }

@@ -8,6 +8,27 @@
       "when": 1795532894407,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795542000000,
+      "tag": "0001_google",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795600000000,
+      "tag": "0002_avatar",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795610000000,
+      "tag": "0003_password_set",
+      "breakpoints": true
     }
   ]
 }

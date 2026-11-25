@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nivo-postgres
+    environment:
+      POSTGRES_USER: nivo
+      POSTGRES_PASSWORD: nivo
+      POSTGRES_DB: nivo
+    ports:
+      # Host 5433 — 5432 is often taken by other local Postgres containers.
+      - "5433:5432"
+    volumes:
+      - nivo_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nivo -d nivo"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  nivo_pg_data:

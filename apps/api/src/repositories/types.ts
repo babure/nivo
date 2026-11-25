@@ -13,6 +13,9 @@ export type UserRecord = {
   emailVerifiedAt: Date | null;
   /** staff role key; null for students */
   role: string | null;
+  googleSub: string | null;
+  avatarUrl: string | null;
+  passwordSet: boolean;
   totpSecret: EncryptedBlob | null;
   failedLoginCount: number;
   lockedUntil: Date | null;
@@ -168,6 +171,7 @@ export interface UserRepo {
   create(user: UserRecord): Promise<UserRecord>;
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
+  findByGoogleSub(googleSub: string): Promise<UserRecord | null>;
   update(id: string, patch: Partial<Omit<UserRecord, "id">>): Promise<UserRecord | null>;
   list(): Promise<UserRecord[]>;
 }
@@ -235,6 +239,7 @@ export interface AuditRepo {
 export interface LeadRepo {
   create(lead: LeadRecord): Promise<void>;
   list(): Promise<LeadRecord[]>;
+  listByUser(userId: string): Promise<LeadRecord[]>;
   get(id: string): Promise<LeadRecord | null>;
   updateStatus(id: string, status: LeadStatus, now: Date): Promise<LeadRecord | null>;
   addNote(note: LeadNoteRecord): Promise<void>;
@@ -244,6 +249,7 @@ export interface LeadRepo {
 export interface LegalRepo {
   list(): Promise<LegalDocumentRecord[]>;
   getPublished(slug: string): Promise<LegalDocumentRecord | null>;
+  publish(doc: LegalDocumentRecord): Promise<LegalDocumentRecord>;
 }
 
 export interface SettingsRepo {

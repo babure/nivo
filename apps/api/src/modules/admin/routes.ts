@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { CARD_STATUSES, canApproveRequest } from "@nivo/shared";
 import { z } from "zod";
+import { csvRow } from "../../lib/csv.js";
 import { AppError, parseStrict } from "../../lib/errors.js";
-import { requireAuthContext } from "../../plugins/auth.js";
+import { isStepUpFresh } from "../../lib/step-up.js";
+import { requireAuthContext, requireStaffMfa } from "../../plugins/auth.js";
+import { ACCOMMODATION_NOTIFY_SETTING } from "../accommodation/service.js";
 import { PARTNER_LINKS_SETTING, partnerLinksSchema } from "../partners/routes.js";
 import { DEFAULT_SIM_REQUIRED, SIM_RULES_SETTING } from "../cards/service.js";
 import {
@@ -29,10 +32,19 @@ const decideBody = z.object({
   note: z.string().trim().max(500).optional(),
 });
 const createApprovalBody = z.object({
-  action: z.enum(["students:mark_paid", "identity:reveal"]),
+  action: z.enum(["students:mark_paid", "identity:reveal", "payments:refund", "exports:students", "exports:leads"]),
   targetUserId: z.string().uuid(),
   reason: z.string().trim().min(10).max(500),
 });
+const notifyEmailBody = z.object({
+  email: z.string().email().max(200),
+});
+
+function assertStepUp(sessionId: string) {
+  if (!isStepUpFresh(sessionId) && process.env.NODE_ENV !== "test") {
+    throw new AppError("STEP_UP_REQUIRED", "Re-confirm with your two-factor code.");
+  }
+}
 
 function isSuperAdmin(role: string | null): boolean {
   return role === "super_admin";
@@ -42,10 +54,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   const { repos, payments, cards, identity, audit } = app.services;
 
   app.addHook("preHandler", app.requireAuth);
+  app.addHook("preHandler", async (req) => {
+    requireStaffMfa(req);
+  });
 
   app.get("/v1/admin/me", async (req) => {
     const ctx = requireAuthContext(req);
-    return { id: ctx.user.id, role: ctx.user.role, permissions: ctx.permissions };
+    return {
+      id: ctx.user.id,
+      role: ctx.user.role,
+      permissions: ctx.permissions,
+      totpEnabled: ctx.user.totpSecret !== null,
+      stepUpFresh: isStepUpFresh(ctx.sessionId),
+    };
   });
 
   app.get("/v1/admin/students", { preHandler: requirePermission("students:read") }, async () => {
@@ -81,7 +102,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (actor.id === id) throw new AppError("FORBIDDEN", "You cannot mark your own account as paid.");
 
       if (!isSuperAdmin(actor.role)) {
-        const pending = createApproval({
+        const pending = await createApproval({
           action: "students:mark_paid",
           requesterId: actor.id,
           requesterEmail: actor.email,
@@ -131,10 +152,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { id } = parseStrict(idParams, req.params);
       const { reason } = parseStrict(reasonBody, req.body);
-      const actor = requireAuthContext(req).user;
+      const ctx = requireAuthContext(req);
+      const actor = ctx.user;
+      assertStepUp(ctx.sessionId);
 
       if (!isSuperAdmin(actor.role)) {
-        const pending = createApproval({
+        const pending = await createApproval({
           action: "identity:reveal",
           requesterId: actor.id,
           requesterEmail: actor.email,
@@ -161,7 +184,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       status === "pending" || status === "approved" || status === "rejected"
         ? { status: status as "pending" | "approved" | "rejected" }
         : undefined;
-    return { approvals: listApprovals(filter) };
+    return { approvals: await listApprovals(filter) };
   });
 
   app.post(
@@ -171,7 +194,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       // Allow creating from Approvals UI as well (requester must still have underlying perm via decide path).
       const body = parseStrict(createApprovalBody, req.body);
       const actor = requireAuthContext(req).user;
-      const pending = createApproval({
+      const pending = await createApproval({
         action: body.action as ApprovalAction,
         requesterId: actor.id,
         requesterEmail: actor.email,
@@ -196,14 +219,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const { id } = parseStrict(idParams, req.params);
       const { decision, note } = parseStrict(decideBody, req.body);
       const ctx = requireAuthContext(req);
-      const existing = getApproval(id);
+      const existing = await getApproval(id);
       if (!existing) throw new AppError("NOT_FOUND", "Approval not found.");
       if (existing.status !== "pending") throw new AppError("CONFLICT", "Approval already decided.");
       if (!canApproveRequest(existing.requesterId, ctx.user.id, ctx.permissions)) {
         throw new AppError("FORBIDDEN", "You cannot approve your own request.");
       }
 
-      const updated = decideApprovalRecord(id, decision, ctx.user.id, note);
+      const updated = await decideApprovalRecord(id, decision, ctx.user.id, note);
       if (!updated) throw new AppError("CONFLICT", "Approval already decided.");
 
       await audit.append({
@@ -220,10 +243,45 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         } else if (updated.action === "identity:reveal") {
           const revealed = await identity.reveal(updated.targetUserId, ctx.user.id, updated.reason);
           return { approval: updated, result: revealed };
+        } else if (updated.action === "payments:refund") {
+          await payments.refund(updated.targetUserId, ctx.user.id, updated.reason);
         }
       }
 
       return { approval: updated };
+    },
+  );
+
+  app.post(
+    "/v1/admin/students/:id/refund",
+    { preHandler: requirePermission("payments:refund") },
+    async (req, reply) => {
+      const { id } = parseStrict(idParams, req.params);
+      const { reason } = parseStrict(reasonBody, req.body);
+      const ctx = requireAuthContext(req);
+      assertStepUp(ctx.sessionId);
+      if (ctx.user.id === id) throw new AppError("FORBIDDEN", "You cannot refund your own account.");
+
+      if (!isSuperAdmin(ctx.user.role)) {
+        const pending = await createApproval({
+          action: "payments:refund",
+          requesterId: ctx.user.id,
+          requesterEmail: ctx.user.email,
+          targetUserId: id,
+          reason,
+        });
+        await audit.append({
+          actorId: ctx.user.id,
+          action: "approvals.requested",
+          entityType: "approval",
+          entityId: pending.id,
+          meta: { action: pending.action, targetUserId: id },
+        });
+        return reply.code(202).send({ status: "pending_approval", approvalId: pending.id });
+      }
+
+      await payments.refund(id, ctx.user.id, reason);
+      return reply.code(204).send();
     },
   );
 
@@ -233,15 +291,35 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/v1/admin/settings", { preHandler: requirePermission("settings:links:edit") }, async () => {
-    const [links, simRules] = await Promise.all([
+    const [links, simRules, notifyEmail] = await Promise.all([
       repos.settings.get<Record<string, string>>(PARTNER_LINKS_SETTING),
       repos.settings.get<string[]>(SIM_RULES_SETTING),
+      repos.settings.get<string>(ACCOMMODATION_NOTIFY_SETTING),
     ]);
     return {
       links: links ?? {},
       simRules: Array.isArray(simRules) ? simRules : DEFAULT_SIM_REQUIRED,
+      accommodationNotifyEmail: typeof notifyEmail === "string" ? notifyEmail : "",
     };
   });
+
+  app.put(
+    "/v1/admin/settings/accommodation-notify",
+    { preHandler: requirePermission("settings:links:edit") },
+    async (req, reply) => {
+      const { email } = parseStrict(notifyEmailBody, req.body);
+      const actor = requireAuthContext(req).user;
+      await repos.settings.set(ACCOMMODATION_NOTIFY_SETTING, email, actor.id);
+      await repos.settings.set("roshan.email", email, actor.id);
+      await audit.append({
+        actorId: actor.id,
+        action: "settings.accommodation_notify_updated",
+        entityType: "setting",
+        entityId: ACCOMMODATION_NOTIFY_SETTING,
+      });
+      return reply.code(204).send();
+    },
+  );
 
   app.put(
     "/v1/admin/settings/links",
@@ -278,4 +356,71 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(204).send();
     },
   );
+
+  app.get("/v1/admin/students/:id/timeline", { preHandler: requirePermission("audit:read") }, async (req) => {
+    const { id } = parseStrict(idParams, req.params);
+    const entries = await audit.list();
+    const timeline = entries
+      .filter((e) => e.entityId === id || (e.meta && (e.meta as { targetUserId?: string }).targetUserId === id))
+      .slice(-100)
+      .reverse();
+    return { studentId: id, timeline };
+  });
+
+  app.get("/v1/admin/exports/students.csv", { preHandler: requirePermission("exports:students") }, async (req, reply) => {
+    const ctx = requireAuthContext(req);
+    assertStepUp(ctx.sessionId);
+    const [users, profiles] = await Promise.all([repos.users.list(), repos.profiles.list()]);
+    const byId = new Map(profiles.map((p) => [p.userId, p]));
+    const rows = [
+      csvRow(["id", "fullName", "email", "country", "intake", "emailVerified", "paymentStatus", "identityComplete"]),
+      ...users
+        .filter((u) => byId.has(u.id) && !u.role)
+        .map((u) => {
+          const p = byId.get(u.id)!;
+          return csvRow([
+            u.id,
+            u.fullName,
+            u.email,
+            u.country,
+            u.intake,
+            u.emailVerifiedAt ? "true" : "false",
+            p.paymentStatus,
+            p.identityComplete ? "true" : "false",
+          ]);
+        }),
+    ];
+    await audit.append({
+      actorId: ctx.user.id,
+      action: "exports.students",
+      entityType: "export",
+      entityId: "students.csv",
+      meta: { rows: rows.length - 1 },
+    });
+    reply.header("Content-Type", "text/csv; charset=utf-8");
+    reply.header("Content-Disposition", 'attachment; filename="students.csv"');
+    return reply.send(rows.join("\n"));
+  });
+
+  app.get("/v1/admin/exports/leads.csv", { preHandler: requirePermission("exports:leads") }, async (req, reply) => {
+    const ctx = requireAuthContext(req);
+    assertStepUp(ctx.sessionId);
+    const leads = await repos.leads.list();
+    const rows = [
+      csvRow(["id", "userId", "city", "budget", "roomType", "status", "phone", "createdAt"]),
+      ...leads.map((l) =>
+        csvRow([l.id, l.userId, l.city, l.budget, l.roomType, l.status, l.phone, l.createdAt.toISOString()]),
+      ),
+    ];
+    await audit.append({
+      actorId: ctx.user.id,
+      action: "exports.leads",
+      entityType: "export",
+      entityId: "leads.csv",
+      meta: { rows: rows.length - 1 },
+    });
+    reply.header("Content-Type", "text/csv; charset=utf-8");
+    reply.header("Content-Disposition", 'attachment; filename="leads.csv"');
+    return reply.send(rows.join("\n"));
+  });
 }

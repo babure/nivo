@@ -4,24 +4,36 @@ import { Button, LinkButton } from "../components/Button";
 
 export function HowItWorks() {
   const steps = [
-    ["Register", "Create your NIVO account and verify your email."],
-    ["Activate", "Pay the one-time service fee to unlock your dashboard."],
-    ["Verify identity", "Complete a short, secure identity onboarding."],
-    ["Get set up", "Work through blocked account, SIM and accommodation cards."],
+    [
+      "Sign up and complete your profile",
+      "Create your NIVO account in minutes, verify your email, and pay the one-time €149 service fee to unlock your dashboard.",
+    ],
+    [
+      "Set up your blocked account",
+      "Follow the guided Sperrkonto partner path and receive the confirmation you need for your visa — tracked as a card on your dashboard.",
+    ],
+    [
+      "Arrive and activate",
+      "Land in Germany with SIM unlock and housing next steps ready. Partner bank or insurance guidance is available when you need it — not as live bundled products in Phase 1.",
+    ],
+    [
+      "Find accommodation & settle in",
+      "Submit city, budget and room type; a NIVO agent follows up. Student support stays available; Job References are coming soon.",
+    ],
   ];
   return (
-    <Page title="How it works" intro="Four simple steps from sign-up to arrival-ready.">
+    <Page title="How It Works" intro="Your journey to Germany — clear steps from sign-up to settling in.">
       <ol className="grid gap-4 sm:grid-cols-2">
         {steps.map(([t, d], i) => (
           <li key={t} className="surface">
-            <span className="text-sm font-semibold text-orange-dark">Step {i + 1}</span>
+            <span className="text-sm font-semibold text-orange-dark">{String(i + 1).padStart(2, "0")}</span>
             <h2 className="text-lg font-semibold">{t}</h2>
             <p className="mt-1 text-sm text-charcoal-soft">{d}</p>
           </li>
         ))}
       </ol>
       <div className="mt-8">
-        <LinkButton to="/register">Register</LinkButton>
+        <LinkButton to="/register">Get Started</LinkButton>
       </div>
     </Page>
   );
@@ -30,32 +42,32 @@ export function HowItWorks() {
 export function Services() {
   const items = [
     {
-      title: "Blocked account",
-      body: "We guide you to open a German Sperrkonto with a trusted partner and track that step on your dashboard.",
-    },
-    {
-      title: "SIM card",
-      body: "Once your blocked-account step is done, unlock a German mobile plan through our partner link — with progress shown on your cards.",
+      title: "Blocked Account",
+      body: "Visa-required Sperrkonto guidance: €11,904 secured, €992 released monthly through a partner. NIVO tracks the step; partner fees are separate from the €149 NIVO fee.",
     },
     {
       title: "Accommodation",
-      body: "Tell us your city, budget and room type. A NIVO accommodation agent follows up and updates your lead status.",
+      body: "Verified student-housing leads in major German cities. Share preferences; NIVO follows up and updates your lead status.",
     },
     {
-      title: "Job references",
-      body: "Coming soon: curated employer introductions. Join the notify list from your dashboard.",
+      title: "SIM Card",
+      body: "Unlock a German SIM once your blocked-account card is complete — progress stays visible on your dashboard.",
     },
     {
-      title: "Identity vault",
-      body: "Passport and address details are encrypted at rest. You control what you share with your consultancy.",
+      title: "Job References",
+      body: "Coming soon: curated part-time and full-time introductions through our partner network.",
     },
     {
-      title: "Consultancy tracking",
-      body: "If you register with a referral code, your consultancy sees a privacy-aware funnel — never your passport.",
+      title: "Student Support",
+      body: "Help with questions about arriving and living in Germany, whenever you need a clear next step.",
+    },
+    {
+      title: "Bank & insurance (partner journey)",
+      body: "Guidance toward partner bank and health-insurance options when you need them. Not sold as live NIVO products in this release.",
     },
   ];
   return (
-    <Page title="Services" intro="What NIVO helps international students set up for Germany.">
+    <Page title="Services" intro="Everything you need to start student life in Germany — in one place.">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((s) => (
           <article key={s.title} className="surface">
@@ -71,28 +83,32 @@ export function Services() {
 export function Faq() {
   const items = [
     [
-      "Who is NIVO for?",
-      "Students moving to Germany who want a clear path for blocked account, SIM, accommodation and related setup — with a single dashboard after a one-time service fee.",
+      "What is a blocked account and why do I need it?",
+      "A Sperrkonto (blocked account) is usually required for a German student visa. You deposit funds that are released monthly. NIVO guides you through a partner path and tracks completion — the deposit and partner fees are paid to the partner, not as part of the €149 NIVO fee.",
     ],
     [
-      "How much does it cost?",
-      "NIVO charges a one-time €149 service fee. Partner products (blocked account funding, insurance, SIM plans, rent) are paid to those partners, not to NIVO.",
+      "How long does the setup take?",
+      "Creating a NIVO account and verifying email takes minutes. Paying the €149 fee unlocks your dashboard. Partner steps (blocked account, SIM, housing) depend on the partner and your documents.",
     ],
     [
-      "Is my data safe?",
-      "Identity fields are encrypted with AES-256-GCM. Sessions use HttpOnly cookies. Staff access is permission-gated and audited. See our Privacy Policy for details.",
+      "Can I use NIVO before I arrive in Germany?",
+      "Yes. Most of the journey is designed for pre-arrival: account, payment, identity onboarding, blocked-account guidance, and housing leads before you land.",
     ],
     [
-      "Do I have to use your partners?",
-      "Cards open partner links we recommend. Your contract is always with the partner. NIVO may receive a commission; it does not increase your price.",
+      "Which cities do you provide accommodation in?",
+      "We take leads for major German student cities. Availability depends on local inventory; a NIVO agent follows up after you submit city, budget and room type.",
     ],
     [
-      "Can my consultancy see my progress?",
-      "Only if you register with their referral code and opt in to share. They see stages and limited contact — never passport or full address.",
+      "How do I get my SIM card and bank account?",
+      "SIM unlocks on your dashboard after the blocked-account step. Bank and insurance are partner journeys you can follow when ready — contracts are with those partners, not NIVO.",
+    ],
+    [
+      "How much does NIVO cost?",
+      "NIVO charges a one-time €149 service fee. Partner products (blocked-account funding, SIM plans, rent, insurance) are billed by partners separately.",
     ],
   ];
   return (
-    <Page title="FAQ" intro="Answers to common questions.">
+    <Page title="FAQ" intro="Frequently asked questions about starting with NIVO.">
       <div className="space-y-3">
         {items.map(([q, a]) => (
           <details key={q} className="surface group">
@@ -115,7 +131,7 @@ export function Contact() {
     e.preventDefault();
     const subject = encodeURIComponent(`NIVO contact from ${name || "website"}`);
     const body = encodeURIComponent(`${message}\n\n— ${name}\n${email}`);
-    window.location.href = `mailto:hello@nivo.example?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:hello@nivo.demo?subject=${subject}&body=${body}`;
     setSent(true);
   }
 
@@ -124,8 +140,8 @@ export function Contact() {
       {sent ? (
         <p role="status" className="surface text-sm">
           Your email client should open with the message. If it doesn’t, write to{" "}
-          <a className="text-orange-dark underline" href="mailto:hello@nivo.example">
-            hello@nivo.example
+          <a className="text-orange-dark underline" href="mailto:hello@nivo.demo">
+            hello@nivo.demo
           </a>
           .
         </p>
@@ -149,9 +165,6 @@ export function Contact() {
           <Button type="submit" className="w-full">
             Open email
           </Button>
-          <p className="text-xs text-charcoal-soft">
-            Prefer chat later? Help will also appear on every signed-in screen once support channels are finalised.
-          </p>
         </form>
       )}
     </Page>

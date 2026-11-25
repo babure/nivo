@@ -82,8 +82,14 @@ export const users = pgTable(
     intake: varchar("intake", { length: 40 }).notNull(),
     passwordHash: text("password_hash").notNull(),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
-    /** staff role key (see DEFAULT_ROLES in @nivo/shared); null for students */
+    /** Product roles: null = student; `super_admin` | `consultancy` */
     role: varchar("role", { length: 64 }),
+    /** Google subject (`sub`) when the account is linked to Google Sign-In */
+    googleSub: varchar("google_sub", { length: 64 }),
+    /** Profile photo URL (e.g. Google picture) */
+    avatarUrl: varchar("avatar_url", { length: 512 }),
+    /** False for Google-only accounts until the user sets a password */
+    passwordSet: boolean("password_set").notNull().default(true),
     totpSecret: jsonb("totp_secret").$type<EncryptedBlobJson>(),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
@@ -91,7 +97,10 @@ export const users = pgTable(
     updatedAt: updatedAt(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [uniqueIndex("users_email_unique").on(t.email)],
+  (t) => [
+    uniqueIndex("users_email_unique").on(t.email),
+    uniqueIndex("users_google_sub_unique").on(t.googleSub),
+  ],
 );
 
 export const sessions = pgTable(

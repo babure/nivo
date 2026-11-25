@@ -1,8 +1,7 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/guards";
 import Home from "./pages/Home";
-import { Contact, Faq, HowItWorks, Services } from "./pages/Info";
 import { Cookies, Impressum, OurRole, Privacy, Terms, Withdrawal } from "./pages/legal/Legal";
 import Register from "./pages/Register";
 import { ForgotPassword, Login, ResetPassword, VerifyEmail } from "./pages/AuthPages";
@@ -18,12 +17,13 @@ import NotFound from "./pages/NotFound";
 export default function App() {
   return (
     <Routes>
+      {/* Student app routes — Layout switches to AppShell when role=student */}
       <Route element={<Layout />}>
         <Route index element={<Home />} />
-        <Route path="how-it-works" element={<HowItWorks />} />
-        <Route path="services" element={<Services />} />
-        <Route path="faq" element={<Faq />} />
-        <Route path="contact" element={<Contact />} />
+        <Route path="how-it-works" element={<Navigate to={{ pathname: "/", hash: "how-it-works" }} replace />} />
+        <Route path="services" element={<Navigate to={{ pathname: "/", hash: "services" }} replace />} />
+        <Route path="faq" element={<Navigate to={{ pathname: "/", hash: "faq" }} replace />} />
+        <Route path="contact" element={<Navigate to={{ pathname: "/", hash: "about" }} replace />} />
 
         <Route path="terms" element={<Terms />} />
         <Route path="cookies" element={<Cookies />} />

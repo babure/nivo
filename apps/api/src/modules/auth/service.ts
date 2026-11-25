@@ -67,6 +67,9 @@ export type PublicUser = {
   emailVerified: boolean;
   role: string | null;
   totpEnabled: boolean;
+  avatarUrl: string | null;
+  passwordSet: boolean;
+  googleLinked: boolean;
 };
 
 export function toPublicUser(u: UserRecord): PublicUser {
@@ -77,6 +80,9 @@ export function toPublicUser(u: UserRecord): PublicUser {
     emailVerified: u.emailVerifiedAt !== null,
     role: u.role,
     totpEnabled: u.totpSecret !== null,
+    avatarUrl: u.avatarUrl,
+    passwordSet: u.passwordSet,
+    googleLinked: Boolean(u.googleSub),
   };
 }
 
@@ -147,6 +153,9 @@ export class AuthService {
       passwordHash,
       emailVerifiedAt: null,
       role: null,
+      googleSub: null,
+      avatarUrl: null,
+      passwordSet: true,
       totpSecret: null,
       failedLoginCount: 0,
       lockedUntil: null,
@@ -205,6 +214,154 @@ export class AuthService {
     if (!rec) throw new AppError("VALIDATION_FAILED", "Invalid or expired verification link.");
     await this.deps.repos.users.update(rec.userId, { emailVerifiedAt: this.now() });
     await this.deps.audit.append({ actorId: rec.userId, action: "auth.verify_email", entityType: "user", entityId: rec.userId });
+    const user = await this.deps.repos.users.findById(rec.userId);
+    if (user) {
+      void this.deps.mailer
+        .send({ to: user.email, template: "welcome", vars: { fullName: user.fullName } })
+        .catch(() => undefined);
+    }
+  }
+
+  /**
+   * Sign in or register via a verified Google profile.
+   * New accounts are students with email already verified; profile fields can be completed later.
+   */
+  async loginWithGoogle(
+    profile: { sub: string; email: string; name: string; picture?: string | null },
+    opts: {
+      referralCode?: string | null;
+      termsVersion?: string | null;
+      privacyVersion?: string | null;
+    } = {},
+    ctx: RequestContext = {},
+  ): Promise<{ user: UserRecord; sessionToken: string; expiresAt: Date; created: boolean }> {
+    const { repos, hasher } = this.deps;
+    const now = this.now();
+    const email = profile.email.trim().toLowerCase();
+    const avatarUrl = profile.picture ?? null;
+
+    let user = await repos.users.findByGoogleSub(profile.sub);
+    let created = false;
+
+    if (!user) {
+      user = await repos.users.findByEmail(email);
+      if (user) {
+        await repos.users.update(user.id, {
+          googleSub: profile.sub,
+          emailVerifiedAt: user.emailVerifiedAt ?? now,
+          fullName: user.fullName || profile.name,
+          ...(avatarUrl ? { avatarUrl } : {}),
+        });
+        user = (await repos.users.findById(user.id))!;
+      }
+    } else if (avatarUrl && user.avatarUrl !== avatarUrl) {
+      await repos.users.update(user.id, { avatarUrl });
+      user = (await repos.users.findById(user.id))!;
+    }
+
+    if (!user) {
+      const terms =
+        opts.termsVersion ?? (await repos.legal.getPublished("terms"))?.version ?? "2025-01";
+      const privacy =
+        opts.privacyVersion ?? (await repos.legal.getPublished("privacy"))?.version ?? "2025-01";
+
+      const passwordHash = await hasher.hash(randomUUID());
+      const newUser: UserRecord = {
+        id: randomUUID(),
+        email,
+        fullName: profile.name,
+        phone: "",
+        country: "Unknown",
+        intake: "TBD",
+        passwordHash,
+        emailVerifiedAt: now,
+        role: null,
+        googleSub: profile.sub,
+        avatarUrl,
+        passwordSet: false,
+        totpSecret: null,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        createdAt: now,
+        deletedAt: null,
+      };
+      try {
+        await repos.users.create(newUser);
+        user = newUser;
+        created = true;
+        const consultancy = opts.referralCode
+          ? await repos.consultancies.findByReferralCode(opts.referralCode)
+          : null;
+        await repos.profiles.upsert({
+          userId: user.id,
+          paymentStatus: "unpaid",
+          paidAt: null,
+          identityComplete: false,
+          consultancyId: consultancy?.id ?? null,
+          referralCode: consultancy ? (opts.referralCode ?? null) : null,
+          shareProgressWithConsultancy: false,
+        });
+        const ipHash = hashIp(ctx.ip);
+        await repos.consents.add({
+          id: randomUUID(),
+          userId: user.id,
+          kind: "terms",
+          version: terms,
+          ipHash,
+          acceptedAt: now,
+        });
+        await repos.consents.add({
+          id: randomUUID(),
+          userId: user.id,
+          kind: "privacy",
+          version: privacy,
+          ipHash,
+          acceptedAt: now,
+        });
+        await this.deps.audit.append({
+          actorId: user.id,
+          action: "auth.google_register",
+          entityType: "user",
+          entityId: user.id,
+        });
+        void this.deps.mailer
+          .send({ to: user.email, template: "welcome", vars: { fullName: user.fullName } })
+          .catch(() => undefined);
+      } catch (err) {
+        if (!(err instanceof UniqueViolationError)) throw err;
+        user = await repos.users.findByEmail(email);
+        if (!user) throw err;
+        await repos.users.update(user.id, {
+          googleSub: profile.sub,
+          emailVerifiedAt: user.emailVerifiedAt ?? now,
+          ...(avatarUrl ? { avatarUrl } : {}),
+        });
+        user = (await repos.users.findById(user.id))!;
+      }
+    }
+
+    if (user.lockedUntil && user.lockedUntil > now) {
+      throw new AppError("AUTH_LOCKED", "Too many failed attempts. Try again later.");
+    }
+
+    await repos.users.update(user.id, { failedLoginCount: 0, lockedUntil: null });
+    const sessionToken = newToken();
+    const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
+    await repos.sessions.create({
+      id: hashToken(sessionToken),
+      userId: user.id,
+      ipHash: hashIp(ctx.ip),
+      userAgent: ctx.userAgent?.slice(0, 256) ?? null,
+      expiresAt,
+      createdAt: now,
+    });
+    await this.deps.audit.append({
+      actorId: user.id,
+      action: created ? "auth.google_login_new" : "auth.google_login",
+      entityType: "user",
+      entityId: user.id,
+    });
+    return { user, sessionToken, expiresAt, created };
   }
 
   async login(
@@ -222,6 +379,14 @@ export class AuthService {
 
     if (user.lockedUntil && user.lockedUntil > now) {
       throw new AppError("AUTH_LOCKED", "Too many failed attempts. Try again later.");
+    }
+
+    if (!user.passwordSet) {
+      await hasher.verify(await this.getDummyHash(), input.password);
+      throw new AppError(
+        "AUTH_INVALID_CREDENTIALS",
+        "This account uses Google sign-in. Sign in with Google, or use Forgot password to set a password.",
+      );
     }
 
     const ok = await hasher.verify(user.passwordHash, input.password);
@@ -303,6 +468,7 @@ export class AuthService {
     const passwordHash = await this.deps.hasher.hash(newPassword);
     await this.deps.repos.users.update(rec.userId, {
       passwordHash,
+      passwordSet: true,
       failedLoginCount: 0,
       lockedUntil: null,
       // possession of the mailbox proves the email
@@ -332,14 +498,73 @@ export class AuthService {
     await this.deps.audit.append({ actorId: userId, action: "auth.totp_enabled", entityType: "user", entityId: userId });
   }
 
-  async requestDeletion(userId: string, password: string): Promise<{ created: boolean }> {
+  /** Re-confirm TOTP for privileged actions (REQ-ADM-05). */
+  async verifyTotp(userId: string, code: string): Promise<void> {
     const user = await this.deps.repos.users.findById(userId);
-    if (!user || !(await this.deps.hasher.verify(user.passwordHash, password))) {
-      throw new AppError("AUTH_INVALID_CREDENTIALS", "Password confirmation failed.");
+    if (!user?.totpSecret) {
+      throw new AppError("AUTH_2FA_REQUIRED", "Two-factor authentication is not enabled.");
     }
+    const secret = decryptField(user.totpSecret, this.key);
+    if (!authenticator.check(code, secret)) {
+      throw new AppError("AUTH_2FA_INVALID", "Invalid two-factor code.");
+    }
+  }
+
+  /**
+   * Set or change password. Google-only accounts (passwordSet=false) can set without current password.
+   * Accounts that already have a password must confirm currentPassword.
+   */
+  async setPassword(
+    userId: string,
+    input: { password: string; currentPassword?: string },
+  ): Promise<void> {
+    const user = await this.deps.repos.users.findById(userId);
+    if (!user) throw new AppError("NOT_FOUND", "User not found.");
+
+    if (user.passwordSet) {
+      if (!input.currentPassword) {
+        throw new AppError("VALIDATION_FAILED", "Current password is required.");
+      }
+      const ok = await this.deps.hasher.verify(user.passwordHash, input.currentPassword);
+      if (!ok) throw new AppError("AUTH_INVALID_CREDENTIALS", "Current password is incorrect.");
+    }
+
+    const passwordHash = await this.deps.hasher.hash(input.password);
+    await this.deps.repos.users.update(userId, { passwordHash, passwordSet: true });
+    await this.deps.audit.append({
+      actorId: userId,
+      action: user.passwordSet ? "auth.password_changed" : "auth.password_set",
+      entityType: "user",
+      entityId: userId,
+    });
+  }
+
+  async requestDeletion(
+    userId: string,
+    input: { password?: string; confirmEmail?: string },
+  ): Promise<{ created: boolean }> {
+    const user = await this.deps.repos.users.findById(userId);
+    if (!user) throw new AppError("NOT_FOUND", "User not found.");
+
+    if (user.passwordSet) {
+      if (!input.password || !(await this.deps.hasher.verify(user.passwordHash, input.password))) {
+        throw new AppError("AUTH_INVALID_CREDENTIALS", "Password confirmation failed.");
+      }
+    } else {
+      const email = (input.confirmEmail ?? "").trim().toLowerCase();
+      if (!email || email !== user.email) {
+        throw new AppError("VALIDATION_FAILED", "Type your account email to confirm deletion.");
+      }
+    }
+
     const res = await this.deps.repos.requests.addDeletionRequest(userId, this.now());
     if (res.created) {
-      await this.deps.audit.append({ actorId: userId, action: "privacy.deletion_requested", entityType: "user", entityId: userId });
+      await this.deps.audit.append({
+        actorId: userId,
+        action: "privacy.deletion_requested",
+        entityType: "user",
+        entityId: userId,
+      });
     }
     return { created: res.created };
   }

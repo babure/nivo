@@ -1,17 +1,25 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { AuthProvider } from "../lib/auth";
 import Home from "./Home";
 
 describe("Home", () => {
-  it("renders brand, tagline and Register CTA", () => {
+  it("renders brand, tagline and Start your journey CTA", () => {
     render(
       <MemoryRouter>
-        <Home />
+        <AuthProvider>
+          <Home />
+        </AuthProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByLabelText("NIVO")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: /a place for new beginnings/i })).toBeInTheDocument();
-    const cta = screen.getByRole("link", { name: "Register" });
-    expect(cta).toHaveAttribute("href", "/register");
+    expect(screen.getByTestId("brand")).toHaveTextContent("NIVO");
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: /a place for new beginnings/i,
+      }),
+    ).toBeInTheDocument();
+    const ctas = screen.getAllByRole("link", { name: "Start your journey" });
+    expect(ctas[0]).toHaveAttribute("href", "/register");
   });
 });

@@ -26,6 +26,9 @@ export function buildServices(deps: {
   mailer: Mailer;
   hasher?: PasswordHasher;
   now?: () => Date;
+  /** Stripe charge used at Checkout (settlement currency when ≠ EUR). */
+  feeCents?: number;
+  feeCurrency?: string;
 }): Services {
   const { config, repos, mailer } = deps;
   const audit = new AuditLogger(repos.audit, deps.now);
@@ -35,7 +38,7 @@ export function buildServices(deps: {
       memoryCost: config.ARGON2_MEMORY_KIB,
       timeCost: config.ARGON2_TIME_COST,
     });
-  const cards = new CardsService({ repos, audit });
+  const cards = new CardsService({ repos, audit, mailer });
   return {
     repos,
     audit,
@@ -47,7 +50,15 @@ export function buildServices(deps: {
       encryptionSecret: config.IDENTITY_ENCRYPTION_KEY,
       now: deps.now,
     }),
-    payments: new PaymentsService({ repos, audit, cards, now: deps.now }),
+    payments: new PaymentsService({
+      repos,
+      audit,
+      cards,
+      mailer,
+      now: deps.now,
+      feeCents: deps.feeCents,
+      feeCurrency: deps.feeCurrency,
+    }),
     cards,
     identity: new IdentityService({
       repos,
@@ -55,7 +66,7 @@ export function buildServices(deps: {
       encryptionSecret: config.IDENTITY_ENCRYPTION_KEY,
       now: deps.now,
     }),
-    accommodation: new AccommodationService({ repos, audit }),
+    accommodation: new AccommodationService({ repos, audit, mailer, cards }),
     consultancy: new ConsultancyService(repos),
   };
 }

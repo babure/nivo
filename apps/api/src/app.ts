@@ -9,7 +9,9 @@ import { apiError, type ErrorCode } from "@nivo/shared";
 import { loadConfig, type AppConfig } from "./config.js";
 import { AppError, zodDetails } from "./lib/errors.js";
 import { createLogger } from "./lib/logger.js";
-import { MemoryMailer, type Mailer } from "./lib/mailer.js";
+import { SERVICE_CURRENCY, SERVICE_FEE_CENTS } from "@nivo/shared";
+import Stripe from "stripe";
+import { createMailer, type Mailer } from "./lib/mailer.js";
 import { accommodationRoutes } from "./modules/accommodation/routes.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import { authRoutes } from "./modules/auth/routes.js";
@@ -19,8 +21,11 @@ import { consultancyRoutes } from "./modules/consultancy/routes.js";
 import { healthRoutes, type HealthDeps } from "./modules/health/routes.js";
 import { identityRoutes } from "./modules/identity/routes.js";
 import { legalRoutes } from "./modules/legal/routes.js";
+import { documentsRoutes } from "./modules/documents/routes.js";
 import { partnersRoutes } from "./modules/partners/routes.js";
+import { resolveCheckoutCharge } from "./modules/payments/charge-currency.js";
 import { paymentsRoutes, type PaymentsRoutesOptions } from "./modules/payments/routes.js";
+import { proofsRoutes } from "./modules/proofs/routes.js";
 import { authPlugin } from "./plugins/auth.js";
 import { securityHeaders } from "./plugins/security-headers.js";
 import { InMemoryRepositories } from "./repositories/memory.js";
@@ -31,6 +36,8 @@ declare module "fastify" {
   interface FastifyInstance {
     config: AppConfig;
     services: Services;
+    /** Actual Stripe Checkout charge (settlement currency when Adaptive Pricing needs it). */
+    checkoutFee: { amountCents: number; currency: string };
   }
 }
 
@@ -48,8 +55,30 @@ export type BuildAppOptions = {
 export async function buildApp(opts: BuildAppOptions = {}) {
   const config = opts.config ?? loadConfig();
   const repos = opts.repos ?? new InMemoryRepositories();
-  const mailer = opts.mailer ?? new MemoryMailer();
+  const mailer = opts.mailer ?? createMailer(config);
   const logger = opts.logger ?? createLogger(config.LOG_LEVEL);
+
+  let feeCents = SERVICE_FEE_CENTS;
+  let feeCurrency: string = SERVICE_CURRENCY;
+  if (config.STRIPE_SECRET_KEY && !config.isTest) {
+    try {
+      const stripe = new Stripe(config.STRIPE_SECRET_KEY);
+      const charge = await resolveCheckoutCharge(stripe, {
+        overrideCurrency: config.STRIPE_CHARGE_CURRENCY,
+        overrideAmountCents: config.STRIPE_CHARGE_AMOUNT_CENTS,
+      });
+      feeCents = charge.amountCents;
+      feeCurrency = charge.currency;
+      if (charge.reason !== "product_eur") {
+        logger.warn(
+          { feeCurrency, feeCents, reason: charge.reason },
+          "Adaptive Pricing: charging in Stripe settlement currency (list price remains EUR)",
+        );
+      }
+    } catch (err) {
+      logger.error({ err }, "Could not resolve Stripe charge currency; falling back to EUR");
+    }
+  }
 
   const app = Fastify({
     loggerInstance: logger,
@@ -63,9 +92,18 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   });
 
   app.decorate("config", config);
+  app.decorate("checkoutFee", { amountCents: feeCents, currency: feeCurrency });
   app.decorate(
     "services",
-    buildServices({ config, repos, mailer, hasher: opts.hasher, now: opts.now }),
+    buildServices({
+      config,
+      repos,
+      mailer,
+      hasher: opts.hasher,
+      now: opts.now,
+      feeCents,
+      feeCurrency,
+    }),
   );
 
   // ── error envelope: { error: { code, message, requestId, details } }
@@ -137,6 +175,8 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(identityRoutes);
   await app.register(legalRoutes);
   await app.register(adminRoutes);
+  await app.register(proofsRoutes);
+  await app.register(documentsRoutes);
   await app.register(consultancyRoutes);
   await app.register(accommodationRoutes);
   await app.register(partnersRoutes);

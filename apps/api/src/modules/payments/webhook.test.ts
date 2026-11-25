@@ -154,7 +154,9 @@ describe("POST /v1/webhooks/stripe", () => {
 
     const after = await app.inject({ method: "GET", url: "/v1/cards", headers: { cookie } });
     const cards = after.json().cards as { key: string; status: string }[];
-    expect(cards.find((c) => c.key === "accommodation")?.status).toBe("available");
+    // Paid but identity incomplete: cards 1+3 stay locked (REQ-CARD-08).
+    expect(cards.find((c) => c.key === "accommodation")?.status).toBe("locked");
+    expect(cards.find((c) => c.key === "blocked_account")?.status).toBe("locked");
     expect(cards.find((c) => c.key === "sim")?.status).toBe("locked");
     expect(cards.find((c) => c.key === "jobs")?.status).toBe("coming_soon");
   });

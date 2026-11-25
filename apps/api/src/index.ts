@@ -4,8 +4,13 @@ import { fileURLToPath } from "node:url";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
+import { migrateDatabase } from "./db/migrate.js";
 import { createLogger } from "./lib/logger.js";
-import { InMemoryRepositories } from "./repositories/memory.js";
+import { bindDocumentsDb } from "./lib/documents-store.js";
+import { bindApprovalsDb } from "./modules/admin/approvals-store.js";
+import { bindProofsDb } from "./modules/proofs/store.js";
+import { startRetentionWorker } from "./jobs/retention.js";
+import { PostgresRepositories } from "./repositories/postgres.js";
 import { seedDevData } from "./seed/dev-data.js";
 
 // Load apps/api/.env into process.env before config parsing.
@@ -15,22 +20,25 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.LOG_LEVEL);
 
-  // Postgres-backed repositories are not implemented yet: the API runs on the in-memory
-  // repositories (data is lost on restart). Refuse to do that in production.
-  if (config.isProd) {
-    throw new Error(
-      "Refusing to start in production: Drizzle repositories are not implemented yet (in-memory store only).",
-    );
+  if (!config.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required. Start Postgres (docker compose up -d) and set DATABASE_URL.");
   }
-  logger.warn("Using in-memory repositories (development only; data is not persisted).");
 
-  const repos = new InMemoryRepositories();
-  const dbHandle = config.DATABASE_URL ? createDb(config.DATABASE_URL) : null;
+  await migrateDatabase(config.DATABASE_URL);
+  logger.info("Database migrations applied");
+
+  const dbHandle = createDb(config.DATABASE_URL);
+  bindApprovalsDb(dbHandle.db);
+  bindDocumentsDb(dbHandle.db);
+  bindProofsDb(dbHandle.db);
+  const repos = new PostgresRepositories(dbHandle.db);
+  await repos.ensureDefaults();
+
   const app = await buildApp({
     config,
     logger,
     repos,
-    health: dbHandle ? { dbCheck: () => dbHandle.ping() } : {},
+    health: { dbCheck: () => dbHandle.ping() },
   });
 
   if (config.seedDevData) {
@@ -39,10 +47,18 @@ async function main(): Promise<void> {
     console.log(table);
   }
 
+  const stopRetention = startRetentionWorker({
+    db: dbHandle.db,
+    repos,
+    logger,
+    encryptionSecret: config.IDENTITY_ENCRYPTION_KEY,
+  });
+
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, "shutting down");
+    stopRetention();
     await app.close();
-    await dbHandle?.close();
+    await dbHandle.close();
     process.exit(0);
   };
   process.once("SIGINT", () => void shutdown("SIGINT"));

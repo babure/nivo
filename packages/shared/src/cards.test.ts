@@ -93,6 +93,19 @@ describe("SIM unlock engine", () => {
     ).toBe("locked");
   });
 
+  it("identity incomplete gates accommodation (REQ-CARD-08)", () => {
+    expect(
+      dashboardCardAvailability({
+        paymentPaid: true,
+        identityComplete: false,
+        cardKey: "accommodation",
+        requiredForSim: ["blocked_account"],
+        progress: [],
+        comingSoon: false,
+      }),
+    ).toBe("locked");
+  });
+
   it("sim progress counts required completions", () => {
     expect(
       simProgress({

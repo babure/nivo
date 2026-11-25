@@ -157,17 +157,18 @@ export class InMemoryRepositories implements Repositories {
   private consultancyList: { id: string; name: string; referralCode: string }[] = [];
   private memberships = new Map<string, { consultancyId: string; role: string }>();
   readonly cardDefs: CardDefinition[];
-  readonly legalDocs: LegalDocumentRecord[];
+  legalDocs: LegalDocumentRecord[];
 
   constructor(opts: { cards?: CardDefinition[]; legal?: LegalDocumentRecord[] } = {}) {
     this.cardDefs = opts.cards ?? DEFAULT_CARDS;
-    this.legalDocs = opts.legal ?? DEFAULT_LEGAL;
+    this.legalDocs = [...(opts.legal ?? DEFAULT_LEGAL)];
     this.settingMap.set("partner_links", {
       expatrio: "https://example.com/expatrio",
       vodafone: "https://example.com/vodafone",
       swarajya: "https://example.com/swarajya",
     });
     this.settingMap.set("roshan.email", "roshan@example.com");
+    this.settingMap.set("accommodation.notify_email", "roshan@example.com");
   }
 
   /** Test / seed helpers (not part of the Repositories contract). */
@@ -209,6 +210,12 @@ export class InMemoryRepositories implements Repositories {
     findById: async (id) => {
       const u = this.usersById.get(id);
       return u && !u.deletedAt ? { ...u } : null;
+    },
+    findByGoogleSub: async (googleSub) => {
+      for (const u of this.usersById.values()) {
+        if (u.googleSub === googleSub && !u.deletedAt) return { ...u };
+      }
+      return null;
     },
     update: async (id, patch) => {
       const u = this.usersById.get(id);
@@ -339,6 +346,8 @@ export class InMemoryRepositories implements Repositories {
   leads: Repositories["leads"] = {
     create: async (l) => void this.leadMap.set(l.id, { ...l }),
     list: async () => [...this.leadMap.values()].map((l) => ({ ...l })),
+    listByUser: async (userId) =>
+      [...this.leadMap.values()].filter((l) => l.userId === userId).map((l) => ({ ...l })),
     get: async (id) => {
       const l = this.leadMap.get(id);
       return l ? { ...l } : null;
@@ -361,6 +370,10 @@ export class InMemoryRepositories implements Repositories {
         .filter((d) => d.slug === slug && d.published)
         .sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0));
       return docs[0] ? { ...docs[0] } : null;
+    },
+    publish: async (doc) => {
+      this.legalDocs.push({ ...doc });
+      return { ...doc };
     },
   };
 

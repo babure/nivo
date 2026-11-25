@@ -13,24 +13,38 @@ export const LEGAL_LINKS = [
 export function Footer() {
   const { openSettings } = useConsent();
   return (
-    <footer className="border-t border-charcoal/10 bg-beige/70">
-      <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-8 sm:px-6">
-        <p className="text-lg font-bold tracking-widest text-orange">NIVO</p>
-        <nav aria-label="Legal" className="flex flex-wrap gap-x-2 gap-y-1">
-          {LEGAL_LINKS.map((l) => (
-            <Link key={l.to} to={l.to} className="inline-flex min-h-tap items-center px-2 text-sm hover:text-orange-dark">
-              {l.label}
-            </Link>
-          ))}
-          <button
-            type="button"
-            onClick={openSettings}
-            className="inline-flex min-h-tap items-center px-2 text-sm underline underline-offset-4 hover:text-orange-dark"
-          >
-            Cookie settings
-          </button>
-        </nav>
-        <p className="text-xs text-charcoal-soft">© {new Date().getFullYear()} NIVO. All rights reserved.</p>
+    <footer className="border-t border-charcoal/10 bg-white/70">
+      <div className="mx-auto grid max-w-5xl gap-8 px-4 py-12 sm:grid-cols-[1.4fr_1fr] sm:px-6">
+        <div>
+          <p className="font-display text-lg font-bold tracking-[0.18em] text-orange">NIVO</p>
+          <p className="mt-2 max-w-sm text-sm leading-relaxed text-charcoal-soft">
+            A place for new beginnings — clear next steps for students arriving in Germany.
+          </p>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-charcoal">Legal</p>
+          <nav aria-label="Legal" className="mt-3 flex flex-wrap gap-x-1 gap-y-1">
+            {LEGAL_LINKS.map((l) => (
+              <Link
+                key={l.to}
+                to={l.to}
+                className="inline-flex min-h-tap items-center px-2 text-sm text-charcoal-soft no-underline hover:text-orange-dark"
+              >
+                {l.label}
+              </Link>
+            ))}
+            <button
+              type="button"
+              onClick={openSettings}
+              className="inline-flex min-h-tap items-center px-2 text-sm text-charcoal-soft underline underline-offset-4 hover:text-orange-dark"
+            >
+              Cookie settings
+            </button>
+          </nav>
+        </div>
+        <p className="text-xs text-charcoal-soft sm:col-span-2">
+          © {new Date().getFullYear()} NIVO. One-time service fee €149; partner costs billed separately.
+        </p>
       </div>
     </footer>
   );
