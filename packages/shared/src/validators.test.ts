@@ -88,14 +88,14 @@ describe("validators", () => {
     ).toBe("admin@nivo.test");
   });
 
-  it("createConsultancy requires manager password with email", () => {
-    expect(() =>
+  it("createConsultancy accepts optional manager email invite without password", () => {
+    expect(
       createConsultancySchema.parse({
         name: "Partner Org",
         code: "PARTNER1",
         managerEmail: "mgr@partner.test",
-      }),
-    ).toThrow();
+      }).managerEmail,
+    ).toBe("mgr@partner.test");
     expect(
       createConsultancySchema.parse({
         name: "Partner Org",

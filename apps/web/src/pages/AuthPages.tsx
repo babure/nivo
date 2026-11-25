@@ -124,7 +124,7 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
             )}
             {consultancyIntent && (
               <p className="text-center text-xs text-charcoal-soft">
-                Need access? Ask a NIVO admin to add a manager login under Partners.
+                Need access? Ask a NIVO admin to invite you under Partners — you&apos;ll get an email to set your password.
               </p>
             )}
           </div>
@@ -178,6 +178,7 @@ export function ResetPassword() {
   const location = useLocation();
   const toast = useToast();
   const params = new URLSearchParams(location.search);
+  const isInvite = params.get("invite") === "consultancy";
   const [token, setToken] = useState(params.get("token") ?? "");
   const [password, setPassword] = useState("");
   const [done, setDone] = useState(false);
@@ -186,7 +187,11 @@ export function ResetPassword() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (token.trim().length < 20) {
-      toast.error("Paste the full reset link or token from your email");
+      toast.error(
+        isInvite
+          ? "Open the full invite link from your email"
+          : "Paste the full reset link or token from your email",
+      );
       return;
     }
     const parsed = passwordSchema.safeParse(password);
@@ -198,10 +203,10 @@ export function ResetPassword() {
     try {
       await api.post("/v1/auth/reset-password", { token: token.trim(), password: parsed.data });
       setDone(true);
-      toast.success("Password updated");
+      toast.success(isInvite ? "You're in — password set" : "Password updated");
     } catch (err) {
       toast.error(
-        "Could not reset password",
+        isInvite ? "Could not complete invite" : "Could not reset password",
         formatApiError(err, "Request a new link if this one expired."),
       );
     } finally {
@@ -210,10 +215,22 @@ export function ResetPassword() {
   }
 
   return (
-    <Page title="Choose a new password" narrow>
+    <Page
+      title={isInvite ? "Join your consultancy" : "Choose a new password"}
+      intro={
+        isInvite
+          ? "Set a password to activate your consultancy portal login."
+          : undefined
+      }
+      narrow
+    >
       {done ? (
         <div className="space-y-3">
-          <p className="text-sm text-charcoal-soft">Your password was updated. Sign in with the new password.</p>
+          <p className="text-sm text-charcoal-soft">
+            {isInvite
+              ? "Your account is ready. Sign in to open the consultancy portal."
+              : "Your password was updated. Sign in with the new password."}
+          </p>
           <Link to="/login" className="btn-primary inline-flex w-full justify-center">
             <LogIn className="h-4 w-4 shrink-0" aria-hidden />
             Sign in
@@ -222,11 +239,11 @@ export function ResetPassword() {
       ) : (
         <form onSubmit={onSubmit} className="space-y-4">
           {!params.get("token") && (
-            <Field label="Reset token" hint="From the reset email link.">
+            <Field label={isInvite ? "Invite token" : "Reset token"} hint="From the email link.">
               <input className="input" value={token} onChange={(e) => setToken(e.target.value)} required />
             </Field>
           )}
-          <Field label="New password" hint={PASSWORD_REQUIREMENTS}>
+          <Field label={isInvite ? "Choose a password" : "New password"} hint={PASSWORD_REQUIREMENTS}>
             <input
               className="input"
               type="password"
@@ -239,7 +256,7 @@ export function ResetPassword() {
           </Field>
           <Button type="submit" className="w-full" disabled={busy || token.length < 20}>
             <KeyRound className="h-4 w-4 shrink-0" aria-hidden />
-            {busy ? "Saving…" : "Update password"}
+            {busy ? "Saving…" : isInvite ? "Set password and join" : "Update password"}
           </Button>
         </form>
       )}

@@ -154,7 +154,7 @@ export function Accommodation() {
       {
         key: "city",
         header: "City",
-        cell: (l) => <span className="font-medium">{l.city}</span>,
+        cell: (l) => <span className="table-primary">{l.city}</span>,
       },
       {
         key: "room",
@@ -795,13 +795,13 @@ export function Documents() {
       {
         key: "number",
         header: "Invoice",
-        cell: (inv) => <span className="font-mono text-xs font-medium">{inv.number}</span>,
+        cell: (inv) => <span className="table-primary">{inv.number}</span>,
       },
       {
         key: "issued",
         header: "Issued",
         cell: (inv) => (
-          <span className="text-xs text-charcoal-soft">
+          <span className="table-meta">
             {inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString() : "—"}
           </span>
         ),
@@ -809,7 +809,7 @@ export function Documents() {
       {
         key: "format",
         header: "Format",
-        cell: () => <span className="text-xs">PDF</span>,
+        cell: () => <span className="table-meta">PDF</span>,
       },
     ],
     [],
@@ -1026,13 +1026,13 @@ export function Documents() {
               {
                 key: "title",
                 header: "Document",
-                cell: (d: StoredDoc) => <span className="font-medium">{d.title}</span>,
+                cell: (d: StoredDoc) => <span className="table-primary">{d.title}</span>,
               },
               {
                 key: "created",
                 header: "Accepted",
                 cell: (d: StoredDoc) => (
-                  <span className="text-xs text-charcoal-soft">
+                  <span className="table-meta">
                     {d.createdAt ? new Date(d.createdAt).toLocaleDateString() : "—"}
                   </span>
                 ),
@@ -1040,7 +1040,7 @@ export function Documents() {
               {
                 key: "format",
                 header: "Format",
-                cell: () => <span className="text-xs">PDF</span>,
+                cell: () => <span className="table-meta">PDF</span>,
               },
             ]}
             rows={termsDocs}

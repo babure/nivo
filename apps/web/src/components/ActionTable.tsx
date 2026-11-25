@@ -29,6 +29,7 @@ type Props<T> = {
 /**
  * Compact actionable table for short lists (papers, enquiries, team).
  * Prefer DataTable for large searchable datasets.
+ * Visual styles come from shared `.table-*` classes in index.css (keep in sync with DataTable).
  */
 export function ActionTable<T>({
   columns,
@@ -47,24 +48,17 @@ export function ActionTable<T>({
   const colSpan = columns.length + (actions ? 1 : 0);
 
   return (
-    <div className="overflow-x-auto overscroll-contain rounded-2xl border border-charcoal/15 bg-white [-webkit-overflow-scrolling:touch]">
-      <table className="min-w-[28rem] w-full border-collapse text-left text-sm">
+    <div className="table-shell">
+      <table className="table-root min-w-[28rem]">
         <thead>
-          <tr className="border-b border-charcoal/15 bg-[#EDE8E0]">
+          <tr className="table-head-row">
             {columns.map((c) => (
-              <th
-                key={c.key}
-                scope="col"
-                className={`px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-charcoal ${c.className ?? ""}`}
-              >
+              <th key={c.key} scope="col" className={`table-th ${c.className ?? ""}`}>
                 {c.header}
               </th>
             ))}
             {actions ? (
-              <th
-                scope="col"
-                className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.06em] text-charcoal"
-              >
+              <th scope="col" className="table-th text-right">
                 {actionsHeader}
               </th>
             ) : null}
@@ -73,14 +67,14 @@ export function ActionTable<T>({
         <tbody>
           {loading &&
             Array.from({ length: skeletonRows }, (_, i) => (
-              <tr key={`sk-${i}`} className="border-t border-charcoal/8">
+              <tr key={`sk-${i}`} className="table-body-row">
                 {columns.map((c, ci) => (
-                  <td key={c.key} className="px-3 py-2.5">
+                  <td key={c.key} className="table-td">
                     <Skeleton className={`h-3.5 ${ci === 0 ? "w-28" : "w-16"}`} />
                   </td>
                 ))}
                 {actions ? (
-                  <td className="px-3 py-2.5 text-right">
+                  <td className="table-td text-right">
                     <Skeleton className="ml-auto h-8 w-20 rounded-xl" />
                   </td>
                 ) : null}
@@ -112,17 +106,14 @@ export function ActionTable<T>({
           {!loading &&
             !error &&
             rows.map((row) => (
-              <tr
-                key={getRowId(row)}
-                className="border-t border-charcoal/8 align-middle odd:bg-white even:bg-[#FAF8F5]"
-              >
+              <tr key={getRowId(row)} className="table-body-row">
                 {columns.map((c) => (
-                  <td key={c.key} className={`px-3 py-2.5 text-charcoal ${c.className ?? ""}`}>
+                  <td key={c.key} className={`table-td ${c.className ?? ""}`}>
                     {c.cell(row)}
                   </td>
                 ))}
                 {actions ? (
-                  <td className="px-3 py-2.5 text-right">
+                  <td className="table-td text-right">
                     <div className="inline-flex flex-wrap items-center justify-end gap-1.5">{actions(row)}</div>
                   </td>
                 ) : null}

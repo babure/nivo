@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { LogOut } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { homePathFor, logoutPathFor } from "../lib/navigation";
 
@@ -58,86 +59,93 @@ export function Header() {
           NIVO
         </Link>
 
-        <button
-          type="button"
-          className="btn-secondary px-3 sm:hidden"
-          aria-expanded={open}
-          aria-controls="main-nav"
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? "Close" : "Menu"}
-        </button>
-
-        {open ? (
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
-            className="fixed inset-0 z-10 bg-charcoal/20 sm:hidden"
-            aria-label="Close menu"
-            onClick={() => setOpen(false)}
-          />
-        ) : null}
+            className="btn-secondary px-3 sm:hidden"
+            aria-expanded={open}
+            aria-controls="main-nav"
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? "Close" : "Menu"}
+          </button>
 
-        <nav
-          id="main-nav"
-          aria-label="Main"
-          className={`${
-            open ? "flex" : "hidden"
-          } absolute inset-x-3 top-[calc(100%+0.35rem)] z-20 max-h-[min(70dvh,28rem)] flex-col gap-1 overflow-y-auto rounded-2xl border border-charcoal/10 bg-white p-3 shadow-soft sm:static sm:z-auto sm:flex sm:max-h-none sm:flex-row sm:items-center sm:gap-0.5 sm:overflow-visible sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none`}
-        >
-          {!user &&
-            PUBLIC_NAV.map((n) => (
-              <button
-                key={n.hash}
-                type="button"
-                className={`inline-flex min-h-tap w-full items-center rounded-xl px-3 text-left text-sm font-medium sm:w-auto ${
-                  location.hash === n.hash ? "text-orange-dark" : "text-charcoal hover:text-orange-dark"
-                }`}
-                onClick={() => goSection(n.hash)}
-              >
-                {n.label}
-              </button>
-            ))}
-          {isAdmin && (
-            <NavLink to="/admin/students" className={link} onClick={() => setOpen(false)}>
-              Admin
-            </NavLink>
-          )}
-          {isConsultancy && (
-            <NavLink to="/consultancy/dashboard" className={link} onClick={() => setOpen(false)}>
-              Referrals
-            </NavLink>
-          )}
+          {open ? (
+            <button
+              type="button"
+              className="fixed inset-0 z-10 bg-charcoal/20 sm:hidden"
+              aria-label="Close menu"
+              onClick={() => setOpen(false)}
+            />
+          ) : null}
+
+          <nav
+            id="main-nav"
+            aria-label="Main"
+            className={`${
+              open ? "flex" : "hidden"
+            } absolute inset-x-3 top-[calc(100%+0.35rem)] z-20 max-h-[min(70dvh,28rem)] flex-col gap-1 overflow-y-auto rounded-2xl border border-charcoal/10 bg-white p-3 shadow-soft sm:static sm:z-auto sm:flex sm:max-h-none sm:flex-row sm:items-center sm:gap-0.5 sm:overflow-visible sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none`}
+          >
+            {!user &&
+              PUBLIC_NAV.map((n) => (
+                <button
+                  key={n.hash}
+                  type="button"
+                  className={`inline-flex min-h-tap w-full items-center rounded-xl px-3 text-left text-sm font-medium sm:w-auto ${
+                    location.hash === n.hash ? "text-orange-dark" : "text-charcoal hover:text-orange-dark"
+                  }`}
+                  onClick={() => goSection(n.hash)}
+                >
+                  {n.label}
+                </button>
+              ))}
+            {isAdmin && (
+              <NavLink to="/admin/students" className={link} onClick={() => setOpen(false)}>
+                Admin
+              </NavLink>
+            )}
+            {isConsultancy && (
+              <NavLink to="/consultancy/dashboard" className={link} onClick={() => setOpen(false)}>
+                Referrals
+              </NavLink>
+            )}
+            {user ? (
+              <div className="mt-1 flex w-full flex-col gap-2 border-t border-charcoal/10 pt-2 sm:ml-1 sm:mt-0 sm:w-auto sm:flex-row sm:items-center sm:border-0 sm:pt-0">
+                <NavLink to={homePathFor(user)} className={link} onClick={() => setOpen(false)}>
+                  Open app
+                </NavLink>
+              </div>
+            ) : (
+              <div className="mt-1 flex w-full flex-col gap-2 border-t border-charcoal/10 pt-2 sm:mt-0 sm:w-auto sm:flex-row sm:items-center sm:border-0 sm:pt-0">
+                <NavLink to="/login" className={link} onClick={() => setOpen(false)}>
+                  Log in
+                </NavLink>
+                <Link
+                  to="/register"
+                  className="btn-primary w-full px-4 text-center text-sm no-underline sm:ml-1 sm:w-auto"
+                  onClick={() => setOpen(false)}
+                >
+                  Start your journey
+                </Link>
+              </div>
+            )}
+          </nav>
+
           {user ? (
-            <div className="mt-1 flex w-full flex-col gap-2 border-t border-charcoal/10 pt-2 sm:ml-1 sm:mt-0 sm:w-auto sm:flex-row sm:items-center sm:border-0 sm:pt-0">
-              <NavLink to={homePathFor(user)} className={link} onClick={() => setOpen(false)}>
-                Open app
-              </NavLink>
-              <button
-                type="button"
-                className="btn-secondary w-full sm:w-auto"
-                onClick={() => {
-                  const role = user.role;
-                  void signOut().then(() => navigate(logoutPathFor(role), { replace: true }));
-                }}
-              >
-                Log out
-              </button>
-            </div>
-          ) : (
-            <div className="mt-1 flex w-full flex-col gap-2 border-t border-charcoal/10 pt-2 sm:mt-0 sm:w-auto sm:flex-row sm:items-center sm:border-0 sm:pt-0">
-              <NavLink to="/login" className={link} onClick={() => setOpen(false)}>
-                Log in
-              </NavLink>
-              <Link
-                to="/register"
-                className="btn-primary w-full px-4 text-center text-sm no-underline sm:ml-1 sm:w-auto"
-                onClick={() => setOpen(false)}
-              >
-                Start your journey
-              </Link>
-            </div>
-          )}
-        </nav>
+            <button
+              type="button"
+              className="relative z-20 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-charcoal/10 bg-charcoal/[0.04] text-charcoal-soft transition-colors hover:border-charcoal/15 hover:bg-charcoal/[0.07] hover:text-charcoal"
+              aria-label="Log out"
+              title="Log out"
+              onClick={() => {
+                const role = user.role;
+                void signOut().then(() => navigate(logoutPathFor(role), { replace: true }));
+              }}
+            >
+              <LogOut className="h-4 w-4" aria-hidden strokeWidth={1.75} />
+            </button>
+          ) : null}
+        </div>
       </div>
     </header>
   );

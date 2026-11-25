@@ -142,7 +142,6 @@ describe("admin routes + permissions middleware", () => {
         name: "Delhi Advisors",
         code: "delhi01",
         managerEmail: "delhi@nivo.test",
-        managerPassword: "NivoConsul1234",
         managerName: "Delhi Manager",
       },
     });
@@ -150,11 +149,26 @@ describe("admin routes + permissions middleware", () => {
     expect(cons.json().code).toBe("DELHI01");
     expect(cons.json().link).toBe("/r/DELHI01");
     expect(cons.json().manager?.email).toBe("delhi@nivo.test");
+    expect(cons.json().manager?.inviteSent).toBe(true);
     const manager = await repos.users.findByEmail("delhi@nivo.test");
     expect(manager?.role).toBe("consultancy");
+    expect(manager?.passwordSet).toBe(false);
+    expect(mailer.lastTokenFor("delhi@nivo.test", "consultancy_invite")).toBeTruthy();
     expect(await repos.consultancies.getMembership(manager!.id)).toMatchObject({
       consultancyId: cons.json().id,
     });
+
+    const inviteTok = mailer.lastTokenFor("delhi@nivo.test", "consultancy_invite")!;
+    const setPw = await app.inject({
+      method: "POST",
+      url: "/v1/auth/reset-password",
+      payload: { token: inviteTok, password: "NivoConsul1234" },
+    });
+    expect(setPw.statusCode).toBe(200);
+    expect(setPw.json()).toMatchObject({ status: "password_updated" });
+    const after = await repos.users.findByEmail("delhi@nivo.test");
+    expect(after?.passwordSet).toBe(true);
+    expect(after?.emailVerifiedAt).toBeTruthy();
   });
 });
 
@@ -221,6 +235,38 @@ describe("partners, legal and consultancy routes", () => {
     expect(c).not.toBeNull();
   });
 
+  it("consultancy can email a student referral invite", async () => {
+    const { app, mailer, repos } = await createTestApp();
+    const member = await signUpAndLogin(app, mailer, { email: "invite-mgr@example.com" });
+    const memberUser = (await repos.users.findByEmail("invite-mgr@example.com"))!;
+    repos.seedConsultancy("Invite Org", "INVITE1", memberUser.id);
+
+    const sent = await app.inject({
+      method: "POST",
+      url: "/v1/consultancy/invite-student",
+      headers: { cookie: member.cookie },
+      payload: { email: "new-student@example.com", fullName: "New Student" },
+    });
+    expect(sent.statusCode).toBe(201);
+    expect(sent.json()).toMatchObject({
+      inviteSent: true,
+      email: "new-student@example.com",
+      referralCode: "INVITE1",
+      link: "/r/INVITE1",
+    });
+    const mail = mailer.lastFor("new-student@example.com", "student_referral_invite");
+    expect(mail?.vars?.referralCode).toBe("INVITE1");
+    expect(mail?.vars?.organisationName).toBe("Invite Org");
+
+    const conflict = await app.inject({
+      method: "POST",
+      url: "/v1/consultancy/invite-student",
+      headers: { cookie: member.cookie },
+      payload: { email: "invite-mgr@example.com" },
+    });
+    expect(conflict.statusCode).toBe(409);
+  });
+
   it("public lookup and student referral apply work end-to-end", async () => {
     const { app, mailer, repos } = await createTestApp();
     repos.seedConsultancy("Delhi Partners", "DELHI");
@@ -249,6 +295,33 @@ describe("partners, legal and consultancy routes", () => {
     expect(mine.json().organisation.name).toBe("Delhi Partners");
   });
 
+  it("admin can suggest and regenerate a unique referral code before create", async () => {
+    const { app, mailer, repos } = await createTestApp();
+    const admin = await signUpAndLogin(app, mailer, { email: "code-boss@example.com" });
+    await promote(repos, "code-boss@example.com", "super_admin");
+    repos.seedConsultancy("Taken Org", "DELHIADVISORS");
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/admin/consultancies/suggest-code",
+      headers: { cookie: admin.cookie },
+      payload: { name: "Delhi Advisors" },
+    });
+    expect(first.statusCode).toBe(200);
+    const code1 = first.json().code as string;
+    expect(code1).not.toBe("DELHIADVISORS");
+    expect(code1.length).toBeGreaterThanOrEqual(4);
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/v1/admin/consultancies/suggest-code",
+      headers: { cookie: admin.cookie },
+      payload: { name: "Delhi Advisors", avoid: [code1] },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().code).not.toBe(code1);
+  });
+
   it("admin can add a manager to a managerless consultancy", async () => {
     const { app, mailer, repos } = await createTestApp();
     const admin = await signUpAndLogin(app, mailer, { email: "boss@example.com" });
@@ -272,12 +345,15 @@ describe("partners, legal and consultancy routes", () => {
       headers: { cookie: admin.cookie },
       payload: {
         email: "orphan-mgr@nivo.test",
-        password: "NivoConsul1234",
         fullName: "Orphan Manager",
       },
     });
     expect(mgr.statusCode).toBe(201);
     expect(mgr.json().manager.email).toBe("orphan-mgr@nivo.test");
+    expect(mgr.json().manager.inviteSent).toBe(true);
+    expect(mailer.lastTokenFor("orphan-mgr@nivo.test", "consultancy_invite")).toBeTruthy();
+    const managerUser = await repos.users.findByEmail("orphan-mgr@nivo.test");
+    expect(managerUser?.passwordSet).toBe(false);
 
     const list2 = await app.inject({ method: "GET", url: "/v1/admin/consultancies", headers: { cookie: admin.cookie } });
     expect(list2.json().consultancies.find((c: { id: string }) => c.id === id)?.hasManager).toBe(true);

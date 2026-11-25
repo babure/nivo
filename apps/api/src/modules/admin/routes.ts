@@ -5,6 +5,8 @@ import {
   addManagerSchema,
   createAdminSchema,
   createConsultancySchema,
+  pickUniqueReferralCode,
+  suggestConsultancyCodeSchema,
 } from "@nivo/shared";
 import { z } from "zod";
 import { csvRow } from "../../lib/csv.js";
@@ -526,13 +528,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
 
-  async function createConsultancyManager(opts: {
+  async function inviteConsultancyManager(opts: {
     consultancyId: string;
     orgName: string;
     email: string;
-    password: string;
     fullName?: string;
-  }): Promise<{ id: string; email: string }> {
+  }): Promise<{ id: string; email: string; inviteSent: boolean }> {
     if (await repos.consultancies.hasMembers(opts.consultancyId)) {
       throw new AppError("CONFLICT", "This consultancy already has a manager login.");
     }
@@ -552,12 +553,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       phone: "+49000000000",
       country: "DE",
       intake: "consultancy",
-      passwordHash: await hasher.hash(opts.password),
-      emailVerifiedAt: now,
+      // Placeholder hash until they set a password via the invite email.
+      passwordHash: await hasher.hash(randomUUID()),
+      emailVerifiedAt: null,
       role: "consultancy",
       googleSub: null,
       avatarUrl: null,
-      passwordSet: true,
+      passwordSet: false,
       totpSecret: null,
       failedLoginCount: 0,
       lockedUntil: null,
@@ -566,7 +568,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     };
     await repos.users.create(user);
     await repos.consultancies.addMember(user.id, opts.consultancyId, "owner");
-    return { id: user.id, email: user.email };
+    await app.services.auth.sendConsultancyInvite(user.id, opts.orgName);
+    return { id: user.id, email: user.email, inviteSent: true };
   }
 
   app.get("/v1/admin/consultancies", { preHandler: requirePermission("consultancies:manage") }, async () => {
@@ -583,6 +586,28 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { consultancies };
   });
 
+  /** Suggest a unique referral code before create — regenerate by sending prior codes in `avoid`. */
+  app.post(
+    "/v1/admin/consultancies/suggest-code",
+    { preHandler: requirePermission("consultancies:manage") },
+    async (req) => {
+      const body = parseStrict(suggestConsultancyCodeSchema, req.body);
+      try {
+        const code = await pickUniqueReferralCode({
+          name: body.name,
+          avoid: body.avoid,
+          isTaken: async (candidate) => Boolean(await repos.consultancies.findByReferralCode(candidate)),
+        });
+        return { code };
+      } catch {
+        throw new AppError(
+          "CONFLICT",
+          "Could not generate a unique referral code. Try a different organisation name.",
+        );
+      }
+    },
+  );
+
   app.post(
     "/v1/admin/consultancies",
     { preHandler: requirePermission("consultancies:manage") },
@@ -597,14 +622,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const created = await app.services.consultancy.create(body.name, referralCode);
-      let manager: { id: string; email: string } | undefined;
+      let manager: { id: string; email: string; inviteSent: boolean } | undefined;
 
-      if (body.managerEmail && body.managerPassword) {
-        manager = await createConsultancyManager({
+      if (body.managerEmail) {
+        manager = await inviteConsultancyManager({
           consultancyId: created.id,
           orgName: body.name,
           email: body.managerEmail,
-          password: body.managerPassword,
           fullName: body.managerName,
         });
       }
@@ -633,11 +657,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const org = await repos.consultancies.findById(id);
       if (!org) throw new AppError("NOT_FOUND", "Consultancy not found.");
 
-      const manager = await createConsultancyManager({
+      const manager = await inviteConsultancyManager({
         consultancyId: org.id,
         orgName: org.name,
         email: body.email,
-        password: body.password,
         fullName: body.fullName,
       });
 

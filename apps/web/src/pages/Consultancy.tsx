@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Check, Copy, FileDown, Users } from "lucide-react";
+import { inviteStudentSchema } from "@nivo/shared";
+import { Check, Copy, FileDown, MailPlus, Users } from "lucide-react";
 import { DataTable } from "../components/DataTable";
-import { Page } from "../components/Page";
+import { Field, FieldGrid, Page } from "../components/Page";
 import { Skeleton, StatGridSkeleton } from "../components/Skeleton";
 import { WorkspaceShell } from "../components/WorkspaceShell";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { logoutPathFor } from "../lib/navigation";
 import { useToast } from "../lib/toast";
@@ -72,6 +73,9 @@ function ConsultancyDashboard() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   useEffect(() => {
     void api
@@ -96,6 +100,34 @@ function ConsultancyDashboard() {
     }
   }
 
+  async function onInviteStudent(e: FormEvent) {
+    e.preventDefault();
+    const draft: { email: string; fullName?: string } = { email: inviteEmail.trim() };
+    if (inviteName.trim()) draft.fullName = inviteName.trim();
+    const parsed = inviteStudentSchema.safeParse(draft);
+    if (!parsed.success) {
+      toast.error("Check the form", parsed.error.issues[0]?.message ?? "Enter a valid email.");
+      return;
+    }
+    setInviteBusy(true);
+    try {
+      const res = await api.post<{ email: string; link: string }>(
+        "/v1/consultancy/invite-student",
+        parsed.data,
+      );
+      toast.success(
+        "Invite sent",
+        `${res.email} got your referral link (${res.link}). They register themselves from that email.`,
+      );
+      setInviteEmail("");
+      setInviteName("");
+    } catch (err) {
+      toast.error("Could not send invite", formatApiError(err, "Could not send invite"));
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
   const columns = useMemo(
     () =>
       [
@@ -103,8 +135,8 @@ function ConsultancyDashboard() {
           header: "Student",
           cell: (info) => (
             <div>
-              <div className="font-medium text-charcoal">{info.getValue()}</div>
-              <div className="font-mono text-xs text-charcoal-soft">{info.row.original.pseudoId}</div>
+              <div className="table-primary">{info.getValue()}</div>
+              <div className="table-code">{info.row.original.pseudoId}</div>
             </div>
           ),
         }),
@@ -120,9 +152,9 @@ function ConsultancyDashboard() {
           enableSorting: false,
           cell: ({ row }) => {
             const s = row.original;
-            if (!s.email && !s.phone) return <span className="text-xs text-charcoal-soft">Hidden</span>;
+            if (!s.email && !s.phone) return <span className="table-meta">Hidden</span>;
             return (
-              <div className="text-xs text-charcoal-soft">
+              <div className="table-meta">
                 {s.email && <div>{s.email}</div>}
                 {s.phone && <div>{s.phone}</div>}
               </div>
@@ -183,11 +215,11 @@ function ConsultancyDashboard() {
               </div>
             ) : data?.organisation ? (
               <>
-                <p className="text-xs font-medium uppercase tracking-wide text-charcoal-soft">Your organisation</p>
+                <p className="section-label">Your organisation</p>
                 <p className="mt-1 font-display text-xl font-semibold text-charcoal">{data.organisation.name}</p>
                 <p className="mt-3 text-sm text-charcoal-soft">
                   Referral code{" "}
-                  <span className="font-mono font-medium text-charcoal">{data.organisation.code}</span>
+                  <span className="table-code font-medium text-charcoal">{data.organisation.code}</span>
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <code className="block flex-1 truncate rounded-xl bg-charcoal/[0.04] px-3 py-2 text-xs text-charcoal">
@@ -210,6 +242,45 @@ function ConsultancyDashboard() {
               <p className="text-sm text-charcoal-soft">Organisation details unavailable.</p>
             )}
           </div>
+
+          {data?.organisation ? (
+            <form
+              onSubmit={(e) => void onInviteStudent(e)}
+              className="rounded-2xl border border-charcoal/10 bg-white px-4 py-4 sm:px-5"
+            >
+              <p className="section-label">Invite a student</p>
+              <p className="mt-1 text-sm text-charcoal-soft">
+                Email them your referral link so they can register under code{" "}
+                <span className="table-code font-medium text-charcoal">{data.organisation.code}</span>.
+              </p>
+              <div className="mt-4">
+                <FieldGrid>
+                  <Field label="Student name (optional)">
+                    <input
+                      className="input"
+                      value={inviteName}
+                      onChange={(e) => setInviteName(e.target.value)}
+                      disabled={inviteBusy}
+                    />
+                  </Field>
+                  <Field label="Student email">
+                    <input
+                      className="input"
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      required
+                      disabled={inviteBusy}
+                    />
+                  </Field>
+                </FieldGrid>
+              </div>
+              <button type="submit" className="btn-primary mt-4 text-sm" disabled={inviteBusy || !inviteEmail.trim()}>
+                <MailPlus className="h-4 w-4 shrink-0" aria-hidden />
+                {inviteBusy ? "Sending…" : "Send referral invite"}
+              </button>
+            </form>
+          ) : null}
 
           {!ready ? (
             <StatGridSkeleton />

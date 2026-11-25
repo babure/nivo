@@ -79,7 +79,8 @@ export function WorkspaceShell({
   return (
     <div className="min-h-screen min-h-[100dvh] bg-paper text-charcoal">
       <div className="flex min-h-screen min-h-[100dvh] w-full">
-        <aside className="sticky top-0 hidden h-screen h-[100dvh] w-56 shrink-0 flex-col border-r border-charcoal/10 bg-paper px-3 py-5 md:flex">
+        {/* z-40 keeps sidebar + profile tooltip above main tables/cards (DOM order alone loses). */}
+        <aside className="sticky top-0 z-40 hidden h-screen h-[100dvh] w-56 shrink-0 flex-col border-r border-charcoal/10 bg-paper px-3 py-5 md:flex">
           <NavLink
             to={brandHref}
             className="font-display mb-0.5 px-2 text-lg font-bold tracking-[0.18em] text-orange no-underline"
@@ -106,28 +107,16 @@ export function WorkspaceShell({
             })}
           </nav>
 
-          <div className="mt-4 border-t border-charcoal/10 px-1.5 pt-4">
-            <div className="group relative flex items-center gap-1.5 rounded-xl px-1 py-1">
-              <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                <ProfileAvatar user={user} initial={initial} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-charcoal">{fullName}</p>
-                  <p className="truncate text-xs text-charcoal-soft">{email}</p>
-                </div>
+          <div className="relative z-50 mt-4 border-t border-charcoal/10 px-1.5 pt-4">
+            <div className="group relative flex items-center gap-2.5 rounded-xl px-1 py-1">
+              <ProfileAvatar user={user} initial={initial} />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-charcoal">{fullName}</p>
+                <p className="truncate text-xs text-charcoal-soft">{email}</p>
               </div>
-              <button
-                type="button"
-                className="btn-ghost h-9 w-9 shrink-0 rounded-xl p-0 text-charcoal-soft hover:bg-charcoal/[0.06] hover:text-charcoal"
-                onClick={onLogout}
-                aria-label="Log out"
-                title="Log out"
-              >
-                <LogOut className="h-4 w-4" aria-hidden strokeWidth={1.75} />
-              </button>
-
               <div
                 role="tooltip"
-                className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] left-0 z-20 hidden w-[15rem] rounded-xl border border-charcoal/10 bg-white p-3 shadow-soft group-hover:block group-focus-within:block"
+                className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] left-0 z-50 hidden w-[min(15rem,calc(100vw-1.5rem))] rounded-xl border border-charcoal/10 bg-white p-3 shadow-soft group-hover:block group-focus-within:block"
               >
                 <p className="text-sm font-medium text-charcoal">{fullName}</p>
                 <p className="mt-0.5 break-all text-xs text-charcoal-soft">{email || "No email"}</p>
@@ -136,7 +125,7 @@ export function WorkspaceShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative z-0 flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-charcoal/10 bg-paper/95 px-4 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur sm:px-6">
             <div className="flex min-w-0 items-center gap-2.5">
               {ActiveIcon ? (
@@ -155,30 +144,19 @@ export function WorkspaceShell({
               </div>
             </div>
 
-            {/* Mobile only — desktop logs out from the sidebar profile row */}
-            <div className="group relative flex shrink-0 items-center gap-1 md:hidden">
-              <div
-                className="flex items-center"
-                title={identityLabel}
-              >
+            <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex items-center md:hidden" title={identityLabel}>
                 <ProfileAvatar user={user} initial={initial} />
               </div>
               <button
                 type="button"
-                className="btn-ghost h-9 w-9 rounded-xl p-0 text-charcoal-soft hover:text-charcoal"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-charcoal/10 bg-charcoal/[0.04] text-charcoal-soft transition-colors hover:border-charcoal/15 hover:bg-charcoal/[0.07] hover:text-charcoal"
                 onClick={onLogout}
                 aria-label="Log out"
                 title="Log out"
               >
                 <LogOut className="h-4 w-4" aria-hidden strokeWidth={1.75} />
               </button>
-              <div
-                role="tooltip"
-                className="pointer-events-none absolute right-0 top-[calc(100%+0.4rem)] z-40 hidden w-[14rem] rounded-xl border border-charcoal/10 bg-white p-3 text-left shadow-soft group-hover:block group-focus-within:block"
-              >
-                <p className="text-sm font-medium text-charcoal">{fullName}</p>
-                <p className="mt-0.5 break-all text-xs text-charcoal-soft">{email || "No email"}</p>
-              </div>
             </div>
           </header>
 

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { inviteStudentSchema } from "@nivo/shared";
 import { z } from "zod";
 import { csvRow } from "../../lib/csv.js";
 import { AppError, parseStrict } from "../../lib/errors.js";
@@ -9,7 +10,7 @@ import { requireAuthContext } from "../../plugins/auth.js";
  * (tenant-isolated), pseudonymised; contact details only for students who opted in.
  */
 export async function consultancyRoutes(app: FastifyInstance): Promise<void> {
-  const { repos, consultancy, audit } = app.services;
+  const { repos, consultancy, audit, mailer } = app.services;
 
   /** Public preview for register / join pages — never leaks student data. */
   app.get("/v1/consultancy/lookup", async (req) => {
@@ -23,6 +24,58 @@ export async function consultancyRoutes(app: FastifyInstance): Promise<void> {
     if (!membership) throw new AppError("FORBIDDEN", "Not a consultancy member.");
     return consultancy.dashboard(membership.consultancyId);
   });
+
+  /** Email a student the org referral join link (they register themselves). */
+  app.post(
+    "/v1/consultancy/invite-student",
+    {
+      preHandler: app.requireAuth,
+      config: { rateLimit: { max: 20, timeWindow: "1 hour" } },
+    },
+    async (req, reply) => {
+      const { user } = requireAuthContext(req);
+      const membership = await repos.consultancies.getMembership(user.id);
+      if (!membership) throw new AppError("FORBIDDEN", "Not a consultancy member.");
+
+      const body = parseStrict(inviteStudentSchema, req.body);
+      const org = await repos.consultancies.findById(membership.consultancyId);
+      if (!org) throw new AppError("NOT_FOUND", "Consultancy not found.");
+
+      const email = body.email.trim().toLowerCase();
+      const existing = await repos.users.findByEmail(email);
+      if (existing) {
+        throw new AppError("CONFLICT", "That email already has a NIVO account.");
+      }
+
+      const referralCode = org.referralCode;
+      const referralLink = `${app.config.APP_URL.replace(/\/$/, "")}/r/${encodeURIComponent(referralCode)}`;
+      await mailer.send({
+        to: email,
+        template: "student_referral_invite",
+        vars: {
+          organisationName: org.name,
+          referralCode,
+          referralLink,
+          fullName: body.fullName?.trim() || undefined,
+        },
+      });
+
+      await audit.append({
+        actorId: user.id,
+        action: "consultancies.student_invite_sent",
+        entityType: "consultancy",
+        entityId: org.id,
+        meta: { email, referralCode },
+      });
+
+      return reply.code(201).send({
+        inviteSent: true,
+        email,
+        referralCode,
+        link: `/r/${referralCode}`,
+      });
+    },
+  );
 
   /** Formula-safe limited CSV (REQ-CON-07). */
   app.get("/v1/consultancy/export.csv", { preHandler: app.requireAuth }, async (req, reply) => {

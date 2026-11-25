@@ -204,7 +204,13 @@ export class AuthService {
     return { status: "pending_verification" };
   }
 
-  private async issueToken(user: UserRecord, purpose: "verify_email" | "reset_password", ttl: number): Promise<void> {
+  private async issueToken(
+    user: UserRecord,
+    purpose: "verify_email" | "reset_password",
+    ttl: number,
+    template: "verify_email" | "reset_password" | "consultancy_invite" = purpose,
+    vars?: { organisationName?: string },
+  ): Promise<void> {
     const token = newToken();
     await this.deps.repos.tokens.create({
       tokenHash: hashToken(token),
@@ -213,7 +219,24 @@ export class AuthService {
       expiresAt: new Date(this.now().getTime() + ttl),
       usedAt: null,
     });
-    await this.deps.mailer.send({ to: user.email, template: purpose, token });
+    await this.deps.mailer.send({ to: user.email, template, token, vars });
+  }
+
+  /** Invite a consultancy manager (or similar) to set their first password via email. */
+  async sendConsultancyInvite(userId: string, organisationName: string): Promise<void> {
+    const user = await this.deps.repos.users.findById(userId);
+    if (!user) throw new AppError("NOT_FOUND", "User not found.");
+    // 24h window — same as email verify — so managers are not rushed.
+    await this.issueToken(user, "reset_password", VERIFY_TTL_MS, "consultancy_invite", {
+      organisationName,
+    });
+    await this.deps.audit.append({
+      actorId: user.id,
+      action: "auth.consultancy_invite_sent",
+      entityType: "user",
+      entityId: user.id,
+      meta: { organisationName },
+    });
   }
 
   async verifyEmail(token: string): Promise<void> {
@@ -405,7 +428,7 @@ export class AuthService {
       await hasher.verify(await this.getDummyHash(), input.password);
       throw new AppError(
         "AUTH_INVALID_CREDENTIALS",
-        "This account uses Google sign-in. Sign in with Google, or use Forgot password to set a password.",
+        "This account has no password yet. Open the invite link from your email, or use Forgot password to set one.",
       );
     }
 

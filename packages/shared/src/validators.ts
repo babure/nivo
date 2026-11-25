@@ -105,31 +105,29 @@ export const createConsultancySchema = z
   .object({
     name: z.string().trim().min(2, "Organisation name is required").max(160),
     code: referralCodeSchema,
+    /** Invites this email to join as manager (set-password link). No temp password. */
     managerEmail: emailSchema.optional(),
-    managerPassword: passwordSchema.optional(),
     managerName: personNameSchema.optional(),
   })
-  .strict()
-  .superRefine((val, ctx) => {
-    if (val.managerEmail && !val.managerPassword) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["managerPassword"],
-        message: "Manager password is required when creating a login",
-      });
-    }
-    if (val.managerPassword && !val.managerEmail) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["managerEmail"],
-        message: "Manager email is required when setting a password",
-      });
-    }
-  });
+  .strict();
+
+/** Suggest / regenerate a unique referral code before creating a consultancy. */
+export const suggestConsultancyCodeSchema = z
+  .object({
+    name: z.string().trim().min(2, "Organisation name is required").max(160),
+    /** Codes already shown in the UI — regenerate must not repeat these. */
+    avoid: z.array(referralCodeSchema).max(24).optional(),
+  })
+  .strict();
 
 export const addManagerSchema = z.object({
   email: emailSchema,
-  password: passwordSchema,
+  fullName: personNameSchema.optional(),
+});
+
+/** Consultancy portal: email a student their referral join link. */
+export const inviteStudentSchema = z.object({
+  email: emailSchema,
   fullName: personNameSchema.optional(),
 });
 

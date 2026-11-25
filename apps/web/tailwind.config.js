@@ -14,6 +14,15 @@ export default {
       fontFamily: {
         display: ["Sora", "Poppins", "ui-sans-serif", "system-ui", "sans-serif"],
         sans: ["Poppins", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: [
+          "ui-monospace",
+          "Cascadia Code",
+          "Segoe UI Mono",
+          "Menlo",
+          "Monaco",
+          "Consolas",
+          "monospace",
+        ],
       },
       borderRadius: {
         xl: "0.75rem",

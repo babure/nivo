@@ -7,6 +7,9 @@ export type MailTemplateVars = {
   cardTitle?: string;
   city?: string;
   leadId?: string;
+  organisationName?: string;
+  referralCode?: string;
+  referralLink?: string;
 };
 
 export type RenderedEmail = { subject: string; html: string; text: string };
@@ -32,6 +35,28 @@ export function renderMailTemplate(
         subject: "Reset your NIVO password",
         text: `We received a request to reset your NIVO password.\n\nOpen this link to choose a new password:\n${link}\n\nIf you did not ask for a reset, you can ignore this email.`,
         html: `<p>We received a request to reset your NIVO password.</p><p><a href="${link}">Choose a new password</a></p><p>If you did not ask for a reset, you can ignore this email.</p>`,
+      };
+    }
+    case "consultancy_invite": {
+      const org = vars.organisationName ?? "your consultancy";
+      const link = `${base}/reset-password?token=${encodeURIComponent(opts.token ?? "")}&invite=consultancy`;
+      return {
+        subject: `Join ${org} on NIVO`,
+        text: `You have been invited to manage ${org} on NIVO.\n\nOpen this link to set your password and join:\n${link}\n\nAfter that, sign in at ${base}/login and open the consultancy portal.\n\nIf you were not expecting this, you can ignore this email.`,
+        html: `<p>You have been invited to manage <strong>${org}</strong> on NIVO.</p><p><a href="${link}">Set your password and join</a></p><p>Then sign in at <a href="${base}/login">${base}/login</a> and open the consultancy portal.</p><p>If you were not expecting this, you can ignore this email.</p>`,
+      };
+    }
+    case "student_referral_invite": {
+      const org = vars.organisationName ?? "your consultancy";
+      const code = vars.referralCode ?? "";
+      const link =
+        vars.referralLink ??
+        `${base}/r/${encodeURIComponent(code)}`;
+      const name = vars.fullName ?? "there";
+      return {
+        subject: `${org} invited you to NIVO`,
+        text: `Hi ${name},\n\n${org} invited you to start your Germany arrival path with NIVO.\n\nRegister with their referral link:\n${link}\n\nYour referral code: ${code}\n`,
+        html: `<p>Hi ${name},</p><p><strong>${org}</strong> invited you to start your Germany arrival path with NIVO.</p><p><a href="${link}">Register with their referral link</a></p><p>Referral code: <code>${code}</code></p>`,
       };
     }
     case "already_registered":

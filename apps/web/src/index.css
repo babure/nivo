@@ -10,9 +10,13 @@
   --color-mist: #e8e4dc;
   --color-charcoal: #1c1a17;
   --color-ink-soft: #5e584f;
+  --color-table-head: #ede8e0;
+  --color-table-row-alt: #faf8f5;
   --radius-control: 0.75rem;
   --shadow-soft: 0 1px 0 rgb(28 26 23 / 0.04), 0 12px 32px rgb(28 26 23 / 0.06);
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Sora", "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Monaco, Consolas, monospace;
 }
 
 @layer base {
@@ -39,7 +43,8 @@
   }
 
   body {
-    @apply font-sans text-charcoal antialiased;
+    @apply text-charcoal antialiased;
+    font-family: var(--font-sans);
     margin: 0;
     min-height: 100vh;
     min-height: 100dvh;
@@ -72,6 +77,69 @@
 @layer components {
   .font-display {
     font-family: var(--font-display);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  /* Shared section / field eyebrows — same weight & tracking everywhere */
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-wide text-charcoal-soft;
+  }
+
+  /* Shared table chrome — DataTable + ActionTable must stay in lockstep */
+  .table-shell {
+    @apply overflow-auto overscroll-contain rounded-2xl border border-charcoal/15 bg-white
+      shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] [-webkit-overflow-scrolling:touch];
+  }
+
+  .table-root {
+    @apply w-full border-collapse text-left text-sm text-charcoal;
+    font-family: var(--font-sans);
+  }
+
+  .table-th {
+    @apply px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-charcoal;
+  }
+
+  .table-td {
+    @apply px-3 py-2.5 text-sm text-charcoal;
+  }
+
+  .table-td-compact {
+    @apply px-3 py-2 text-sm text-charcoal;
+  }
+
+  .table-head-row {
+    border-bottom: 1px solid rgb(28 26 23 / 0.15);
+    background-color: var(--color-table-head);
+  }
+
+  .table-body-row {
+    border-top: 1px solid rgb(28 26 23 / 0.08);
+    @apply align-middle;
+  }
+  .table-body-row:nth-child(odd) {
+    background-color: #fff;
+  }
+  .table-body-row:nth-child(even) {
+    background-color: var(--color-table-row-alt);
+  }
+  .table-body-row:hover {
+    background-color: rgb(251 119 11 / 0.04);
+  }
+
+  .table-primary {
+    @apply font-medium text-charcoal;
+  }
+
+  .table-meta {
+    @apply text-xs text-charcoal-soft;
+  }
+
+  .table-code {
+    @apply font-mono text-xs text-charcoal-soft;
   }
 
   .btn {

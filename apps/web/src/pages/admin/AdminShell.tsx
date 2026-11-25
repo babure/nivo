@@ -14,6 +14,7 @@ import {
   Home,
   LayoutDashboard,
   Layers,
+  RefreshCw,
   Save,
   Scale,
   ScanFace,
@@ -302,8 +303,8 @@ function StudentsPanel() {
             const s = info.row.original;
             return (
               <div className="min-w-[10rem] max-w-[16rem]">
-                <div className="truncate font-medium leading-snug text-charcoal">{s.fullName}</div>
-                <div className="truncate text-[11px] leading-snug text-charcoal-soft">
+                <div className="table-primary truncate leading-snug">{s.fullName}</div>
+                <div className="table-meta truncate leading-snug">
                   {s.email ?? s.id.slice(0, 8)}
                   {s.intake ? ` · ${s.intake}` : ""}
                 </div>
@@ -313,7 +314,7 @@ function StudentsPanel() {
         }),
         studentCol.accessor("country", {
           header: "Country",
-          cell: (info) => <span className="whitespace-nowrap text-xs">{info.getValue()}</span>,
+          cell: (info) => <span className="table-meta whitespace-nowrap">{info.getValue()}</span>,
         }),
         studentCol.accessor("paymentStatus", {
           header: "Pay",
@@ -409,7 +410,7 @@ function StudentsPanel() {
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-charcoal-soft">Path status</p>
+              <p className="section-label mb-2">Path status</p>
               <PathStatusStrip cards={manage.cards} />
             </div>
 
@@ -435,7 +436,7 @@ function StudentsPanel() {
 
             {hasPermission(perms, "students:set_card_status") && (
               <div className="space-y-3 border-t border-charcoal/10 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-charcoal-soft">Update path cards</p>
+                <p className="section-label">Update path cards</p>
                 {cardKeys.map((key) => (
                   <label key={key} className="block text-sm">
                     <span className="mb-1 block text-xs text-charcoal-soft capitalize">
@@ -465,7 +466,7 @@ function StudentsPanel() {
 
             {hasPermission(perms, "audit:read") && (
               <div className="space-y-2 border-t border-charcoal/10 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-charcoal-soft">Timeline</p>
+                <p className="section-label">Timeline</p>
                 {!timelineReady ? (
                   <p className="text-xs text-charcoal-soft">Loading…</p>
                 ) : timeline.length === 0 ? (
@@ -474,10 +475,10 @@ function StudentsPanel() {
                   <ul className="max-h-48 space-y-2 overflow-y-auto text-xs">
                     {timeline.map((e) => (
                       <li key={e.id ?? `${e.at}-${e.action}`} className="rounded-md bg-mist/60 px-2 py-1.5">
-                        <span className="font-medium">{e.action}</span>
+                        <span className="table-primary">{e.action}</span>
                         <span className="text-charcoal-soft"> · {new Date(e.at).toLocaleString()}</span>
                         {e.actorId ? (
-                          <span className="block font-mono text-[10px] text-charcoal-soft">
+                          <span className="table-code block">
                             actor {e.actorId.slice(0, 8)}…
                           </span>
                         ) : null}
@@ -592,7 +593,7 @@ function LeadsPanel() {
       [
         leadCol.accessor("city", {
           header: "City",
-          cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+          cell: (info) => <span className="table-primary">{info.getValue()}</span>,
         }),
         leadCol.accessor("roomType", {
           header: "Room",
@@ -600,12 +601,12 @@ function LeadsPanel() {
         }),
         leadCol.accessor("budget", {
           header: "Budget",
-          cell: (info) => <span className="whitespace-nowrap text-xs">{info.getValue()}</span>,
+          cell: (info) => <span className="table-meta whitespace-nowrap">{info.getValue()}</span>,
         }),
         leadCol.accessor("phone", {
           header: "Phone",
           cell: (info) => (
-            <a className="whitespace-nowrap text-xs text-orange-dark no-underline hover:underline" href={`tel:${info.getValue()}`}>
+            <a className="table-meta whitespace-nowrap text-orange-dark no-underline hover:underline" href={`tel:${info.getValue()}`}>
               {info.getValue()}
             </a>
           ),
@@ -619,7 +620,7 @@ function LeadsPanel() {
         leadCol.accessor("createdAt", {
           header: "Received",
           cell: (info) => (
-            <span className="whitespace-nowrap text-xs text-charcoal-soft">
+            <span className="table-meta whitespace-nowrap">
               {new Date(info.getValue()).toLocaleDateString()}
             </span>
           ),
@@ -630,11 +631,11 @@ function LeadsPanel() {
           cell: (info) => {
             const n = info.getValue()?.trim();
             return n ? (
-              <span className="line-clamp-2 max-w-[14rem] text-xs text-charcoal-soft" title={n}>
+              <span className="table-meta line-clamp-2 max-w-[14rem]" title={n}>
                 {n}
               </span>
             ) : (
-              <span className="text-xs text-charcoal-soft">—</span>
+              <span className="table-meta">—</span>
             );
           },
         }),
@@ -716,7 +717,7 @@ function LeadsPanel() {
 
             {manage.notes?.trim() ? (
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-charcoal-soft">Latest notes</p>
+                <p className="section-label mb-1">Latest notes</p>
                 <p className="whitespace-pre-wrap rounded-xl border border-charcoal/10 bg-mist/40 px-3 py-2.5 text-sm text-charcoal">
                   {manage.notes}
                 </p>
@@ -724,7 +725,7 @@ function LeadsPanel() {
             ) : null}
 
             <label className="block text-sm">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-charcoal-soft">
+              <span className="section-label mb-1 block">
                 Status
               </span>
               <select
@@ -742,7 +743,7 @@ function LeadsPanel() {
             </label>
 
             <div className="space-y-2 border-t border-charcoal/10 pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-charcoal-soft">Add note</p>
+              <p className="section-label">Add note</p>
               <textarea
                 className="input min-h-24"
                 placeholder="Call outcome, viewing time, next step…"
@@ -1014,12 +1015,12 @@ function TeamPanel() {
       {
         key: "name",
         header: "Name",
-        cell: (a) => <span className="font-medium">{a.fullName}</span>,
+        cell: (a) => <span className="table-primary">{a.fullName}</span>,
       },
       {
         key: "email",
         header: "Email",
-        cell: (a) => <span className="text-xs">{a.email}</span>,
+        cell: (a) => <span className="table-meta">{a.email}</span>,
       },
       {
         key: "2fa",
@@ -1116,13 +1117,13 @@ function PartnersPanel() {
   const [ready, setReady] = useState(false);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [codeAvoid, setCodeAvoid] = useState<string[]>([]);
+  const [codeBusy, setCodeBusy] = useState(false);
   const [managerEmail, setManagerEmail] = useState("");
-  const [managerPassword, setManagerPassword] = useState("");
   const [managerName, setManagerName] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [addForId, setAddForId] = useState<string | null>(null);
   const [addEmail, setAddEmail] = useState("");
-  const [addPassword, setAddPassword] = useState("");
   const [addName, setAddName] = useState("");
   const [loadError, setLoadError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -1156,12 +1157,21 @@ function PartnersPanel() {
     }
   }
 
+  function resetCreateForm() {
+    setName("");
+    setCode("");
+    setCodeAvoid([]);
+    setManagerEmail("");
+    setManagerName("");
+  }
+
   function openCreate() {
+    resetCreateForm();
     setCreateOpen(true);
   }
 
   function closeCreate() {
-    if (busy) return;
+    if (busy || codeBusy) return;
     setCreateOpen(false);
   }
 
@@ -1170,18 +1180,45 @@ function PartnersPanel() {
     setAddForId(null);
   }
 
+  async function suggestCode(regenerate: boolean) {
+    const orgName = name.trim();
+    if (orgName.length < 2) {
+      toast.error("Enter the organisation name first");
+      return;
+    }
+    setCodeBusy(true);
+    try {
+      const avoid = regenerate && code ? [...new Set([...codeAvoid, code])] : codeAvoid;
+      const res = await api.post<{ code: string }>("/v1/admin/consultancies/suggest-code", {
+        name: orgName,
+        ...(avoid.length ? { avoid } : {}),
+      });
+      setCode(res.code);
+      setCodeAvoid(avoid);
+    } catch (err) {
+      toast.error(
+        regenerate ? "Could not regenerate code" : "Could not generate code",
+        formatApiError(err, "Try again in a moment."),
+      );
+    } finally {
+      setCodeBusy(false);
+    }
+  }
+
   async function onCreate(e: FormEvent) {
     e.preventDefault();
+    if (!code.trim()) {
+      toast.error("Generate a referral code first");
+      return;
+    }
     const draft: {
       name: string;
       code: string;
       managerEmail?: string;
-      managerPassword?: string;
       managerName?: string;
     } = { name, code };
     if (managerEmail.trim()) {
       draft.managerEmail = managerEmail.trim();
-      draft.managerPassword = managerPassword;
       if (managerName.trim()) draft.managerName = managerName.trim();
     }
     const parsed = createConsultancySchema.safeParse(draft);
@@ -1198,14 +1235,10 @@ function PartnersPanel() {
       toast.success(
         `Created ${created.code}`,
         created.hasManager
-          ? `Manager login ready. Join link ${created.link}`
-          : `Add a manager so they can sign in. Join link ${created.link}`,
+          ? `Invite email sent to the manager. Student join link ${created.link}`
+          : `Add a manager so they can join. Student join link ${created.link}`,
       );
-      setName("");
-      setCode("");
-      setManagerEmail("");
-      setManagerPassword("");
-      setManagerName("");
+      resetCreateForm();
       setCreateOpen(false);
       await load();
     } catch (err) {
@@ -1220,7 +1253,6 @@ function PartnersPanel() {
     if (!addForId) return;
     const parsed = addManagerSchema.safeParse({
       email: addEmail.trim(),
-      password: addPassword,
       ...(addName.trim() ? { fullName: addName.trim() } : {}),
     });
     if (!parsed.success) {
@@ -1230,14 +1262,13 @@ function PartnersPanel() {
     setBusy(true);
     try {
       await api.post(`/v1/admin/consultancies/${addForId}/managers`, parsed.data);
-      toast.success("Manager login created", "They can sign in at /login and open the consultancy portal.");
+      toast.success("Invite sent", "They will get an email to set a password and join the consultancy portal.");
       setAddForId(null);
       setAddEmail("");
-      setAddPassword("");
       setAddName("");
       await load();
     } catch (err) {
-      toast.error("Could not add manager", formatApiError(err, "Could not add manager"));
+      toast.error("Could not invite manager", formatApiError(err, "Could not invite manager"));
     } finally {
       setBusy(false);
     }
@@ -1248,17 +1279,17 @@ function PartnersPanel() {
       [
         partnerCol.accessor("name", {
           header: "Name",
-          cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+          cell: (info) => <span className="table-primary">{info.getValue()}</span>,
         }),
         partnerCol.accessor("code", {
           header: "Code",
-          cell: (info) => <span className="font-mono text-xs">{info.getValue()}</span>,
+          cell: (info) => <span className="table-code">{info.getValue()}</span>,
         }),
         partnerCol.accessor("hasManager", {
           header: "Manager",
           cell: (info) =>
             info.getValue() ? (
-              <span className="text-xs text-charcoal-soft">Ready</span>
+              <span className="table-meta">Ready</span>
             ) : (
               <button
                 type="button"
@@ -1266,12 +1297,11 @@ function PartnersPanel() {
                 onClick={() => {
                   setAddForId(info.row.original.id);
                   setAddEmail("");
-                  setAddPassword("");
                   setAddName("");
                 }}
               >
                 <UserPlus className="mr-1 inline h-3.5 w-3.5" aria-hidden />
-                Add manager
+                Invite manager
               </button>
             ),
         }),
@@ -1280,7 +1310,7 @@ function PartnersPanel() {
           enableSorting: false,
           cell: (info) => (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs">{info.getValue()}</span>
+              <span className="table-code">{info.getValue()}</span>
               <button
                 type="button"
                 className="inline-flex items-center gap-1 text-xs font-medium text-orange-dark underline"
@@ -1326,7 +1356,7 @@ function PartnersPanel() {
       <Dialog
         open={createOpen}
         title="Add consultancy"
-        description="Optional manager login for the consultancy portal."
+        description="Optionally invite a manager by email — they set their own password from the link."
         onClose={closeCreate}
         wide
         footer={
@@ -1335,7 +1365,7 @@ function PartnersPanel() {
               <X className="h-4 w-4 shrink-0" aria-hidden />
               Cancel
             </Button>
-            <Button type="submit" form="partner-create-form" disabled={busy}>
+            <Button type="submit" form="partner-create-form" disabled={busy || codeBusy || !code.trim()}>
               <Building2 className="h-4 w-4 shrink-0" aria-hidden />
               {busy ? "Creating…" : "Create consultancy"}
             </Button>
@@ -1344,28 +1374,52 @@ function PartnersPanel() {
       >
         <form id="partner-create-form" onSubmit={onCreate} className="space-y-4">
           <FieldGrid>
-            <Field label="Organisation name">
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
+            <Field label="Organisation name" className="sm:col-span-2">
+              <input
+                className="input"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  // Name drives the code — clear stale suggestion when they edit it.
+                  if (code) {
+                    setCode("");
+                    setCodeAvoid([]);
+                  }
+                }}
+                required
+                minLength={2}
+              />
             </Field>
-            <Field label="Referral code" hint="Letters/numbers, stored uppercase">
-              <input className="input" value={code} onChange={(e) => setCode(e.target.value)} required minLength={4} />
+            <Field
+              label="Referral code"
+              hint="Generated from the organisation name — unique letters and numbers"
+              className="sm:col-span-2"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  className="input font-mono uppercase tracking-wide"
+                  value={code}
+                  readOnly
+                  required
+                  placeholder="Generate a code"
+                  aria-required
+                />
+                <button
+                  type="button"
+                  className="btn-secondary shrink-0 text-sm"
+                  disabled={busy || codeBusy || name.trim().length < 2}
+                  onClick={() => void suggestCode(Boolean(code))}
+                >
+                  <RefreshCw className={`h-4 w-4 shrink-0 ${codeBusy ? "animate-spin" : ""}`} aria-hidden />
+                  {codeBusy ? "Working…" : code ? "Regenerate" : "Generate code"}
+                </button>
+              </div>
             </Field>
             <Field label="Manager name (optional)">
               <input className="input" value={managerName} onChange={(e) => setManagerName(e.target.value)} />
             </Field>
-            <Field label="Manager email (optional)">
+            <Field label="Manager email (optional)" hint="Sends a join invite so they can set their own password">
               <input className="input" type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} />
-            </Field>
-            <Field label="Manager password" hint={managerEmail.trim() ? PASSWORD_HINT : "Required only if manager email is set"} className="sm:col-span-2">
-              <input
-                className="input"
-                type="password"
-                value={managerPassword}
-                onChange={(e) => setManagerPassword(e.target.value)}
-                autoComplete="new-password"
-                minLength={12}
-                required={Boolean(managerEmail.trim())}
-              />
             </Field>
           </FieldGrid>
         </form>
@@ -1373,8 +1427,8 @@ function PartnersPanel() {
 
       <Dialog
         open={addForId !== null}
-        title="Add manager login"
-        description="Creates a consultancy portal user for an organisation that has no manager yet."
+        title="Invite manager"
+        description="Sends an email so they can set a password and join the consultancy portal."
         onClose={closeManager}
         footer={
           <>
@@ -1384,7 +1438,7 @@ function PartnersPanel() {
             </Button>
             <Button type="submit" form="partner-manager-form" disabled={busy}>
               <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
-              {busy ? "Saving…" : "Create manager"}
+              {busy ? "Sending…" : "Send invite"}
             </Button>
           </>
         }
@@ -1396,17 +1450,6 @@ function PartnersPanel() {
             </Field>
             <Field label="Manager email">
               <input className="input" type="email" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} required />
-            </Field>
-            <Field label="Password" hint={PASSWORD_HINT} className="sm:col-span-2">
-              <input
-                className="input"
-                type="password"
-                value={addPassword}
-                onChange={(e) => setAddPassword(e.target.value)}
-                autoComplete="new-password"
-                required
-                minLength={12}
-              />
             </Field>
           </FieldGrid>
         </form>
@@ -1509,14 +1552,14 @@ function ProofsPanel() {
             <article key={p.id} className="surface space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 text-sm">
-                  <p className="font-semibold capitalize text-charcoal">{p.cardKey.replaceAll("_", " ")}</p>
-                  <p className="mt-0.5 font-medium text-charcoal">
+                  <p className="table-primary capitalize">{p.cardKey.replaceAll("_", " ")}</p>
+                  <p className="mt-0.5 table-primary">
                     {p.studentFullName ?? "Unknown student"}
                     {p.studentEmail ? (
                       <span className="ml-2 font-normal text-charcoal-soft">{p.studentEmail}</span>
                     ) : null}
                   </p>
-                  <p className="mt-1 text-xs text-charcoal-soft">
+                  <p className="table-meta mt-1">
                     Uploaded {new Date(p.createdAt).toLocaleString()}
                   </p>
                 </div>
@@ -1597,24 +1640,24 @@ function ReportsPanel() {
         auditCol.accessor("at", {
           header: "When",
           cell: (info) => (
-            <span className="whitespace-nowrap text-charcoal-soft">{new Date(info.getValue()).toLocaleString()}</span>
+            <span className="table-meta whitespace-nowrap">{new Date(info.getValue()).toLocaleString()}</span>
           ),
         }),
         auditCol.accessor("action", {
           header: "Action",
-          cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+          cell: (info) => <span className="table-primary">{info.getValue()}</span>,
         }),
         auditCol.accessor("actorId", {
           header: "Actor",
           cell: (info) => (
-            <span className="font-mono text-xs">{info.getValue()?.slice(0, 8) ?? "—"}</span>
+            <span className="table-code">{info.getValue()?.slice(0, 8) ?? "—"}</span>
           ),
         }),
         auditCol.display({
           id: "entity",
           header: "Entity",
           cell: ({ row }) => (
-            <span className="text-xs">
+            <span className="table-meta">
               {row.original.entityType ?? "—"}
               {row.original.entityId ? ` · ${row.original.entityId.slice(0, 12)}` : ""}
             </span>
@@ -1751,12 +1794,12 @@ function CardsPanel() {
           {cards.map((c) => (
             <li key={c.key} className="surface flex flex-wrap items-center gap-3 rounded-xl px-4 py-3">
               <div className="min-w-0 flex-1">
-                <p className="font-medium">
+                <p className="table-primary">
                   {c.title}{" "}
-                  <span className="font-mono text-xs text-charcoal-soft">({c.key})</span>
+                  <span className="table-code">({c.key})</span>
                 </p>
-                <p className="text-xs text-charcoal-soft line-clamp-2">{c.description}</p>
-                <p className="mt-1 text-xs text-charcoal-soft">
+                <p className="table-meta line-clamp-2">{c.description}</p>
+                <p className="table-meta mt-1">
                   pos {c.position} · {c.comingSoon ? "coming soon" : "live"} ·{" "}
                   {c.published ? "published" : "unpublished"}
                 </p>

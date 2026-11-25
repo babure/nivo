@@ -197,7 +197,7 @@ export function AdminDashboard() {
                   "surface group block rounded-xl p-4 text-left transition hover:border-orange/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange";
                 const body = (
                   <>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-charcoal-soft">{t.label}</p>
+                    <p className="section-label">{t.label}</p>
                     <p className="mt-2 font-display text-3xl text-charcoal tabular-nums">{t.value}</p>
                     {allowed ? (
                       <p className="mt-2 flex items-center gap-1 text-xs font-medium text-orange-dark opacity-80 group-hover:opacity-100">
@@ -397,7 +397,7 @@ export function AdminDashboard() {
 
             {quickNav.length > 0 ? (
               <section>
-                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-charcoal-soft">Jump to</h2>
+                <h2 className="section-label mb-2">Jump to</h2>
                 <div className="flex flex-wrap gap-2">
                   {quickNav.map((s) => {
                     const Icon = s.icon;

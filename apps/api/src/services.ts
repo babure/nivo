@@ -12,6 +12,7 @@ import type { Repositories } from "./repositories/types.js";
 export type Services = {
   repos: Repositories;
   audit: AuditLogger;
+  mailer: Mailer;
   auth: AuthService;
   payments: PaymentsService;
   cards: CardsService;
@@ -42,6 +43,7 @@ export function buildServices(deps: {
   return {
     repos,
     audit,
+    mailer,
     auth: new AuthService({
       repos,
       mailer,

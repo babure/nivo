@@ -7,6 +7,8 @@ import { ResendEmailProvider } from "./email/providers/resend.js";
 export type MailTemplate =
   | "verify_email"
   | "reset_password"
+  | "consultancy_invite"
+  | "student_referral_invite"
   | "already_registered"
   | "welcome"
   | "pay_receipt"

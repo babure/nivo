@@ -39,6 +39,7 @@ type Props<T> = {
 /**
  * Stable-layout data table: toolbar + bordered table + footer always mount.
  * Loading uses skeleton rows; empty uses an in-table EmptyState — no chrome swap.
+ * Visual styles come from shared `.table-*` classes in index.css (keep in sync with ActionTable).
  */
 export function DataTable<T>({
   data,
@@ -61,6 +62,7 @@ export function DataTable<T>({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const compact = density === "compact";
+  const cellClass = compact ? "table-td-compact" : "table-td";
 
   const table = useReactTable({
     data,
@@ -97,8 +99,6 @@ export function DataTable<T>({
 
   const showEmpty = !loading && !error && filteredCount === 0;
   const showRows = !loading && !error && filteredCount > 0;
-  const cellPad = compact ? "px-3 py-2" : "px-3 py-3";
-  const headPad = compact ? "px-3 py-2.5" : "px-3 py-3";
 
   return (
     <div className="space-y-3">
@@ -121,18 +121,18 @@ export function DataTable<T>({
         {toolbar ? <div className="flex shrink-0 flex-wrap items-center gap-2">{toolbar}</div> : null}
       </div>
 
-      <div className="max-h-[min(70dvh,42rem)] overflow-auto overscroll-contain rounded-2xl border border-charcoal/15 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] [-webkit-overflow-scrolling:touch]">
-        <table className="min-w-[40rem] w-full border-collapse text-left text-sm">
+      <div className="table-shell max-h-[min(70dvh,42rem)]">
+        <table className="table-root min-w-[40rem]">
           <thead className="sticky top-0 z-10">
             {headerGroups.map((hg) => (
-              <tr key={hg.id} className="border-b border-charcoal/15 bg-[#EDE8E0]">
+              <tr key={hg.id} className="table-head-row">
                 {hg.headers.map((header) => {
                   const canSort = header.column.getCanSort() && !loading;
                   const sorted = header.column.getIsSorted();
                   return (
                     <th
                       key={header.id}
-                      className={`${headPad} text-left text-[11px] font-bold uppercase tracking-[0.06em] text-charcoal`}
+                      className="table-th"
                       style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
                       scope="col"
                     >
@@ -163,9 +163,9 @@ export function DataTable<T>({
           <tbody>
             {loading &&
               Array.from({ length: skeletonRows }, (_, r) => (
-                <tr key={`sk-${r}`} className="border-t border-charcoal/8">
+                <tr key={`sk-${r}`} className="table-body-row">
                   {Array.from({ length: colCount }, (_, c) => (
-                    <td key={c} className={cellPad}>
+                    <td key={c} className={cellClass}>
                       <Skeleton className={`h-3.5 ${c === 0 ? "w-36" : c === colCount - 1 ? "w-16" : "w-20"}`} />
                       {c === 0 && !compact ? <Skeleton className="mt-1.5 h-3 w-24" /> : null}
                     </td>
@@ -197,12 +197,9 @@ export function DataTable<T>({
 
             {showRows &&
               table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-t border-charcoal/8 align-middle odd:bg-white even:bg-[#FAF8F5] hover:bg-orange/[0.04]"
-                >
+                <tr key={row.id} className="table-body-row">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className={`${cellPad} text-charcoal`}>
+                    <td key={cell.id} className={cellClass}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
