@@ -207,66 +207,19 @@
     @apply animate-pulse rounded-md bg-charcoal/[0.08];
   }
 
-  .journey-path {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 1;
-    animation: journey-draw 900ms var(--ease-in-out) forwards;
-  }
-
-  .journey-stop {
-    transition: opacity 200ms var(--ease-out);
-  }
-
-  .nivo-walker .walker-rise {
-    transition: transform 160ms var(--ease-out);
-  }
-
-  .nivo-walker .leg,
-  .nivo-walker .arm {
-    transform-box: fill-box;
-    transform-origin: 0 0;
-    animation: nivo-stride 0.72s linear infinite paused;
-  }
-
-  .nivo-walker .leg-r,
-  .nivo-walker .arm-back {
-    animation-direction: reverse;
-  }
-
-  .nivo-walker[data-walking="true"] .leg,
-  .nivo-walker[data-walking="true"] .arm {
-    animation-play-state: running;
+  .hero-globe {
+    display: none;
   }
 }
 
-@keyframes journey-draw {
-  to { stroke-dashoffset: 0; }
-}
-
-@keyframes nivo-stride {
-  0%, 100% { transform: rotate(8deg); }
-  50% { transform: rotate(-8deg); }
-}
-
-@keyframes nivo-cheer {
-  0% { transform: rotate(0deg); }
-  40% { transform: rotate(-12deg); }
-  100% { transform: rotate(0deg); }
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .nivo-walker:hover .walker-rise {
-    transform: translateY(-3px);
-    transition-duration: 220ms;
-    transition-timing-function: var(--ease-out-back);
-  }
-
-  .nivo-walker:hover .leg,
-  .nivo-walker:hover .arm-back {
-    animation-play-state: paused;
-  }
-
-  .nivo-walker:hover .arm-front {
-    animation: nivo-cheer 420ms var(--ease-out) 1;
+@media (min-width: 1024px) {
+  .hero-globe {
+    display: block;
+    position: absolute;
+    top: 50%;
+    right: max(1rem, 2vw);
+    width: min(44vw, 560px);
+    height: min(88%, 640px);
+    translate: 0 -50%;
   }
 }

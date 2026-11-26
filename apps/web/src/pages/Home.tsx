@@ -1,20 +1,31 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Mail } from "lucide-react";
+import { RouteGlobe, type GlobeTheme, type Place } from "../components/ui/route-globe";
 import { Field } from "../components/Page";
 import { Button, LinkButton } from "../components/Button";
 import { useAuth } from "../lib/auth";
 import { homePathFor } from "../lib/navigation";
 
+const INDIA: Place = { name: "India", lon: 78.6, lat: 22 };
+const TO_GERMANY: Place[] = [{ name: "Germany", lon: 10.45, lat: 51.16 }];
+const GLOBE_THEME: GlobeTheme = {
+  ground: "transparent",
+  land: "#5E584F",
+  arc: "#FB770B",
+  glow: "rgb(28 26 23 / 0.1)",
+  text: "#1C1A17",
+  muted: "#5E584F",
+};
+
 const ARRIVE = {
   id: "arrive",
-  line: "U5",
+  line: "U-Bahn",
   title: "You land",
   board: "Berlin, then the list",
-  src: "/landing/berlin-ubahn.jpg",
-  alt: "A yellow U-Bahn train at a Berlin platform, under a departure board for line U5.",
-  focus: "object-[68%_18%]",
-  caption: "U5, Gleis 2. The checklist starts the same way: one next line.",
+  src: "/landing/berlin-platform.jpg",
+  alt: "A yellow U-Bahn train standing at a Berlin platform with the doors open.",
+  focus: "object-[42%_38%]",
   you: "You arrive with a visa file, a place to sleep still open, and a phone that does not have a German number yet.",
   partner: "The steps sit with the people who actually do them: Expatrio for the blocked account, Fintiba for health cover, a housing contact for a room, a SIM partner for the number.",
   nivo: "NIVO is the board. €149 once, then one step at a time. We do not hold the deposit, the premium, or the rent.",
@@ -26,10 +37,9 @@ const LINES = [
     line: "01",
     title: "Blocked account",
     board: "Deposit stays with Expatrio",
-    src: "/landing/passport-case.jpg",
-    alt: "An open suitcase with a passport and travel tickets on the floor beside it.",
-    focus: "object-[center_bottom]",
-    caption: "The visa file. The Sperrkonto proof goes in it. The money does not come to NIVO.",
+    src: "/landing/packing-suitcase.jpg",
+    alt: "A person kneeling on a bed, folding clothes into an open suitcase.",
+    focus: "object-[58%_center]",
     you: "Open a Sperrkonto for the living-cost funds many embassies expect. You complete Expatrio’s form and send them the deposit.",
     partner: "Expatrio holds the account, the deposit, and their own fees. NIVO only marks the step when you have started it.",
     nivo: "We link you there and keep the step on your checklist. We never receive the blocked-account money.",
@@ -42,7 +52,6 @@ const LINES = [
     src: "/landing/apotheke.jpg",
     alt: "The Kreuzberg Apotheke sign in Berlin, with a green cross on either side of the doorway.",
     focus: "object-[center_bottom]",
-    caption: "Kreuzberg Apotheke. Student cover is a contract with an insurer, not a NIVO product.",
     you: "When enrolment or your visa file needs student health insurance, you choose a plan and sign it yourself.",
     partner: "Fintiba is the insurer we introduce. The premium, the policy, and the claims stay between you and them.",
     nivo: "We point you to Fintiba from the checklist. We do not sell insurance and we do not take a premium.",
@@ -55,7 +64,6 @@ const LINES = [
     src: "/landing/berlin-kitchen.jpg",
     alt: "A person cooking at the stove in a small Berlin kitchen.",
     focus: "object-[28%_center]",
-    caption: "A Berlin kitchen, not a listing grid. You tell us the city and the budget. A person follows up.",
     you: "Send city, monthly budget, and room type. That is the brief a housing contact can actually use.",
     partner: "A person on our side replies with student housing leads. The lease and the rent are with the landlord.",
     nivo: "We pass the brief on. We do not take a holding deposit and we are not the landlord.",
@@ -68,7 +76,6 @@ const LINES = [
     src: "/landing/sim-card.jpg",
     alt: "A phone lying beside a SIM tray and a SIM card.",
     focus: "object-[center_70%]",
-    caption: "The chip stays locked on your checklist until the blocked-account step is done.",
     you: "A German number is for after the Sperrkonto is underway, so the steps stay in an order embassies and banks recognise.",
     partner: "When the blocked-account step is complete, we link the SIM partner. You buy the plan from them.",
     nivo: "Until then the card shows locked. We do not sell airtime.",
@@ -208,8 +215,6 @@ export default function Home() {
     : "Start your journey";
 
   const [lineId, setLineId] = useState<LineId>(ARRIVE.id);
-  const [journeyId, setJourneyId] = useState("");
-  const journeyStop = LINES.find((line) => line.id === journeyId);
   const [bill, setBill] = useState<"included" | "elsewhere">("included");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -236,11 +241,13 @@ export default function Home() {
 
   return (
     <div>
-      <section aria-labelledby="hero-headline" className="relative isolate min-h-[calc(100svh-4.25rem)] overflow-hidden border-b border-charcoal/8">
-        <JourneyScene activeId={journeyId} onSelect={setJourneyId} />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-paper from-[18%] via-paper/88 via-45% to-transparent" aria-hidden />
-        <div className="relative z-10 mx-auto flex min-h-[calc(100svh-4.25rem)] max-w-5xl items-center px-4 py-12 sm:px-6">
-          <div className="max-w-xl">
+      <section aria-labelledby="hero-headline" className="hero-flight relative isolate min-h-[calc(100svh-4.25rem)] overflow-hidden border-b border-charcoal/8">
+        <div className="hero-globe">
+          <RouteGlobe hub={INDIA} places={TO_GERMANY} theme={GLOBE_THEME} />
+        </div>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-paper from-[6%] via-paper/85 via-[22%] to-transparent to-[42%]" aria-hidden />
+        <div className="pointer-events-none relative z-10 mx-auto flex min-h-[calc(100svh-4.25rem)] max-w-5xl items-center px-4 py-12 sm:px-6">
+          <div className="pointer-events-auto max-w-xl">
             <p
               data-testid="brand"
               className="font-display text-4xl font-extrabold leading-none tracking-[0.14em] text-orange sm:text-5xl"
@@ -257,11 +264,6 @@ export default function Home() {
               One checklist for the move from India to Germany: a blocked account for the visa file, student health
               cover, a housing lead, and a German SIM. You pay NIVO €149 once. Expatrio, Fintiba, and your landlord
               bill you themselves.
-            </p>
-            <p className="mt-4 min-h-12 max-w-prose text-sm leading-relaxed text-charcoal-soft" aria-live="polite">
-              {journeyStop
-                ? `${journeyStop.title}. ${journeyStop.board}`
-                : "The faint path behind this is the same move, from where the file starts to where the list is finished."}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link to={ctaTo} className="btn-primary px-8">
@@ -305,7 +307,7 @@ export default function Home() {
           <div
             role="tablist"
             aria-label="Checklist lines"
-            className="mt-8 grid gap-2 sm:mt-10 sm:grid-cols-2 lg:grid-cols-4"
+            className="mt-8 divide-y divide-charcoal/10 border-y border-charcoal/10 sm:mt-10"
           >
             {LINES.map((item) => {
               const selected = lineId === item.id;
@@ -317,16 +319,16 @@ export default function Home() {
                   role="tab"
                   aria-selected={selected}
                   aria-controls="path-detail"
-                  className={`min-h-tap rounded-xl border px-4 py-3 text-left transition-colors duration-200 ease-out ${
-                    selected
-                      ? "border-orange bg-orange/10"
-                      : "border-charcoal/10 bg-paper hover:border-charcoal/20"
+                  className={`flex min-h-tap w-full flex-col items-start gap-0.5 px-3 py-4 text-left transition-colors duration-200 ease-out sm:flex-row sm:items-baseline sm:justify-between sm:gap-8 ${
+                    selected ? "bg-orange/10" : "hover:bg-paper"
                   }`}
                   onClick={() => setLineId(item.id)}
                 >
-                  <span className="font-display text-sm font-semibold tabular-nums text-orange-dark">{item.line}</span>
-                  <span className="mt-1 block font-display text-base font-semibold text-charcoal">{item.title}</span>
-                  <span className="mt-1 block text-sm leading-snug text-charcoal-soft">{item.board}</span>
+                  <span className="font-display text-base font-semibold text-charcoal">
+                    <span className="mr-3 tabular-nums text-orange">{item.line}</span>
+                    {item.title}
+                  </span>
+                  <span className="text-sm text-charcoal-soft sm:text-right">{item.board}</span>
                 </button>
               );
             })}
@@ -341,7 +343,6 @@ export default function Home() {
               height={900}
               decoding="async"
             />
-            <figcaption className="mt-2 text-sm leading-relaxed text-charcoal-soft">{frame.caption}</figcaption>
           </figure>
 
           <div
@@ -349,7 +350,7 @@ export default function Home() {
             role="tabpanel"
             aria-live="polite"
             aria-labelledby={lineId === ARRIVE.id ? undefined : `line-${lineId}`}
-            className="mt-6 grid gap-4 border-t border-charcoal/10 pt-6 sm:grid-cols-3"
+            className="mt-6 grid gap-6 border-t border-charcoal/10 pt-6"
           >
             <Detail label="What you do" body={frame.you} />
             <Detail label="Who you deal with" body={frame.partner} />
@@ -366,10 +367,7 @@ export default function Home() {
             </button>
           )}
 
-          <p className="mt-8 text-sm text-charcoal-soft">
-            Photographs via Pexels: a Berlin U-Bahn platform, a packed suitcase, the Kreuzberg Apotheke, a Berlin
-            kitchen, a SIM beside a phone, and a pavement café.
-          </p>
+          <p className="mt-8 text-sm text-charcoal-soft">Photographs via Pexels.</p>
           <p className="mt-3 text-sm text-charcoal-soft">
             Curious how referrals work?{" "}
             <Link to="/our-role" className="font-semibold text-orange-dark no-underline hover:underline">
@@ -507,9 +505,6 @@ export default function Home() {
                 loading="lazy"
                 decoding="async"
               />
-              <figcaption className="px-1 py-2 text-sm text-charcoal-soft">
-                Health cover is a policy you sign. The pharmacy on the corner is not our shop.
-              </figcaption>
             </figure>
           </div>
           <div className="divide-y divide-charcoal/10 border-y border-charcoal/10">
@@ -555,9 +550,6 @@ export default function Home() {
                 loading="lazy"
                 decoding="async"
               />
-              <figcaption className="px-1 py-2 text-sm text-charcoal-soft">
-                Berlin, once the file is done. The email is for the line that is stuck before you get here.
-              </figcaption>
             </figure>
             <ul className="mt-4 max-w-prose space-y-2 text-sm leading-relaxed text-charcoal-soft">
               <li>A person reads hello@nivo.demo. There is no phone queue.</li>
@@ -692,209 +684,17 @@ export default function Home() {
           </div>
           <figure className="relative lg:min-h-full">
             <img
-              src="/landing/passport-case.jpg"
-              alt="An open suitcase on a carpet, with a passport, tickets, and a small model plane beside it."
-              className="h-64 w-full object-cover object-[72%_100%] sm:h-72 lg:absolute lg:inset-0 lg:h-full"
+              src="/landing/packing-suitcase.jpg"
+              alt="A person kneeling on a bed, folding clothes into an open suitcase."
+              className="h-64 w-full object-cover object-[72%_68%] sm:h-72 lg:absolute lg:inset-0 lg:h-full"
               width={1600}
               height={1067}
               loading="lazy"
               decoding="async"
             />
-            <figcaption className="bg-charcoal px-4 py-3 text-sm text-white lg:absolute lg:inset-x-0 lg:bottom-0 lg:bg-gradient-to-t lg:from-charcoal lg:via-charcoal/75 lg:to-transparent lg:px-4 lg:pb-5 lg:pt-16">
-              Packed, not paid. The bag is yours. The deposit does not travel inside it.
-            </figcaption>
           </figure>
         </div>
       </section>
-      <RouteWalker />
-    </div>
-  );
-}
-
-const JOURNEY = [
-  { id: "india", label: "India", x: 590, y: 150, r: 3.5, far: true },
-  { id: "blocked", label: "Blocked account", x: 710, y: 230, r: 4 },
-  { id: "cover", label: "Health cover", x: 820, y: 320, r: 4.5 },
-  { id: "room", label: "A room", x: 910, y: 410, r: 5 },
-  { id: "sim", label: "German SIM", x: 980, y: 490, r: 5.5 },
-  { id: "germany", label: "Germany", x: 1040, y: 560, r: 7, near: true },
-] as const;
-
-const JOURNEY_PATH = "M590 150 C 690 185, 760 240, 820 320 S 970 450, 1040 560";
-
-function JourneyScene({
-  activeId,
-  onSelect,
-}: {
-  activeId: string;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 h-full w-full text-charcoal"
-      viewBox="0 0 1200 800"
-      preserveAspectRatio="xMaxYMid slice"
-    >
-      <g aria-hidden>
-        <ellipse cx="980" cy="390" rx="340" ry="86" fill="none" stroke="currentColor" strokeOpacity="0.06" />
-        <ellipse cx="1010" cy="470" rx="210" ry="48" fill="none" stroke="currentColor" strokeOpacity="0.05" />
-        <path
-          d={JOURNEY_PATH}
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity="0.07"
-          strokeWidth="22"
-          strokeLinecap="round"
-        />
-        <path
-          className="journey-path"
-          d={JOURNEY_PATH}
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity="0.28"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          pathLength="1"
-        />
-      </g>
-      <g role="group" aria-label="Stops on the path from India to Germany">
-        {JOURNEY.map((place) => {
-          const pressable = place.id !== "india" && place.id !== "germany";
-          const on = activeId === place.id;
-          const far = "far" in place && place.far;
-          const near = "near" in place && place.near;
-          const opacity = on ? 1 : far ? 0.38 : near ? 0.72 : 0.5;
-          return (
-            <g
-              key={place.id}
-              className="journey-stop"
-              opacity={opacity}
-              role={pressable ? "button" : undefined}
-              tabIndex={pressable ? 0 : undefined}
-              aria-pressed={pressable ? on : undefined}
-              aria-label={pressable ? place.label : undefined}
-              style={{ pointerEvents: pressable ? "auto" : "none", cursor: pressable ? "pointer" : undefined }}
-              onClick={() => {
-                if (!pressable) return;
-                onSelect(on ? "" : place.id);
-              }}
-              onKeyDown={(event) => {
-                if (!pressable) return;
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelect(on ? "" : place.id);
-                }
-              }}
-            >
-              <circle cx={place.x} cy={place.y} r={on ? place.r + 1.5 : place.r} fill={on ? "#FB770B" : "currentColor"} />
-              <text
-                x={place.x > 960 ? place.x - place.r - 10 : place.x + place.r + 10}
-                y={place.y + 4}
-                textAnchor={place.x > 960 ? "end" : "start"}
-                fill="currentColor"
-                fontSize={near ? 22 : far ? 14 : 15}
-                fontFamily="Sora, Poppins, sans-serif"
-              >
-                {place.label}
-              </text>
-            </g>
-          );
-        })}
-      </g>
-    </svg>
-  );
-}
-
-function RouteWalker() {
-  const mark = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const node = mark.current;
-    if (!node) return;
-    const media =
-      typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
-
-    const place = (progress: number) => {
-      const top = 96;
-      const travel = Math.max(0, window.innerHeight - top - 88);
-      node.style.transform = `translate3d(0, ${top + travel * progress}px, 0)`;
-    };
-
-    if (!media || media.matches) {
-      place(0.12);
-      return;
-    }
-
-    let frame = 0;
-    let idle = 0;
-    const update = () => {
-      frame = 0;
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      place(max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0);
-    };
-    const onScroll = () => {
-      node.dataset.walking = "true";
-      window.clearTimeout(idle);
-      idle = window.setTimeout(() => {
-        node.dataset.walking = "false";
-      }, 160);
-      if (!frame) frame = requestAnimationFrame(update);
-    };
-
-    update();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", update);
-    const onMotion = () => {
-      if (media.matches) {
-        node.dataset.walking = "false";
-        place(0.12);
-      } else update();
-    };
-    media.addEventListener("change", onMotion);
-
-    return () => {
-      window.clearTimeout(idle);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", update);
-      media.removeEventListener("change", onMotion);
-      if (frame) cancelAnimationFrame(frame);
-    };
-  }, []);
-
-  return (
-    <div className="pointer-events-none fixed right-5 top-0 z-20 hidden xl:block" aria-hidden>
-      <div ref={mark} className="nivo-walker pointer-events-auto">
-        <svg width="36" height="48" viewBox="0 0 48 64" fill="none" overflow="visible">
-          <g className="walker-rise">
-            <circle cx="24" cy="14" r="4.2" fill="#FB770B" />
-            <path d="M19.2 20.2c.2-1.5 2.1-2.6 4.8-2.6s4.6 1.1 4.8 2.6V34H19.2V20.2Z" fill="#FB770B" />
-            <g transform="translate(22,33)">
-              <g className="leg leg-l">
-                <path d="M0 0 L0 16" stroke="#FB770B" strokeWidth="2.2" strokeLinecap="round" />
-              </g>
-            </g>
-            <g transform="translate(26,33)">
-              <g className="leg leg-r">
-                <path d="M0 0 L0 16" stroke="#FB770B" strokeWidth="2.2" strokeLinecap="round" />
-              </g>
-            </g>
-            <g transform="translate(28,22)">
-              <g className="arm arm-back">
-                <path d="M0 0 L0 11" stroke="#FB770B" strokeWidth="2.2" strokeLinecap="round" />
-                <circle cx="0" cy="12" r="1.35" fill="#FB770B" />
-              </g>
-            </g>
-            <g transform="translate(20,22) scale(-1,1)">
-              <g className="arm arm-front">
-                <path d="M0 0 L0 11" stroke="#FB770B" strokeWidth="2.2" strokeLinecap="round" />
-                <circle cx="0" cy="12" r="1.35" fill="#FB770B" />
-                <rect x="1.2" y="13.2" width="6.2" height="4.4" rx="0.8" fill="#1C1A17" />
-                <path d="M2.4 13.3v-1a1.6 1.6 0 0 1 3.2 0v1" stroke="#1C1A17" strokeWidth="1" />
-              </g>
-            </g>
-          </g>
-        </svg>
-      </div>
     </div>
   );
 }
