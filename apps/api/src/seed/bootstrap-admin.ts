@@ -6,6 +6,7 @@ import type { Repositories, UserRecord } from "../repositories/types.js";
 /**
  * Ensures at least one super_admin exists on startup.
  * Uses ADMIN_EMAIL + ADMIN_PASSWORD when provided; otherwise (non-prod) creates admin@nivo.test.
+ * Marks the original env-bootstrapped admin with `isBootstrap` so peers cannot block/delete them.
  */
 export async function bootstrapAdmin(
   repos: Repositories,
@@ -13,8 +14,17 @@ export async function bootstrapAdmin(
   log: { info: (obj: object, msg?: string) => void; warn: (obj: object, msg?: string) => void },
 ): Promise<void> {
   const users = await repos.users.list();
-  const hasSuperAdmin = users.some((u) => u.role === "super_admin" && !u.deletedAt);
-  if (hasSuperAdmin) return;
+  const supers = users.filter((u) => u.role === "super_admin" && !u.deletedAt);
+
+  // Existing deploy: ensure exactly one bootstrap flag if none set.
+  if (supers.length > 0 && !supers.some((u) => u.isBootstrap)) {
+    const oldest = [...supers].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]!;
+    await repos.users.update(oldest.id, { isBootstrap: true });
+    log.info({ email: oldest.email }, "Marked oldest super_admin as bootstrap owner");
+    return;
+  }
+
+  if (supers.length > 0) return;
 
   const email = (config.ADMIN_EMAIL ?? (config.isProd ? undefined : "admin@nivo.test"))?.trim().toLowerCase();
   const password = config.ADMIN_PASSWORD ?? (config.isProd ? undefined : "NivoTest1234");
@@ -33,10 +43,13 @@ export async function bootstrapAdmin(
 
   const existing = await repos.users.findByEmail(email);
   if (existing) {
-    if (existing.role !== "super_admin") {
-      await repos.users.update(existing.id, { role: "super_admin", emailVerifiedAt: existing.emailVerifiedAt ?? new Date() });
-      log.info({ email }, "Promoted existing user to super_admin");
-    }
+    await repos.users.update(existing.id, {
+      role: "super_admin",
+      isBootstrap: true,
+      emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
+      blockedAt: null,
+    });
+    log.info({ email }, "Promoted existing user to bootstrap super_admin");
     return;
   }
 
@@ -58,8 +71,10 @@ export async function bootstrapAdmin(
     googleSub: null,
     avatarUrl: null,
     passwordSet: true,
+    isBootstrap: true,
     failedLoginCount: 0,
     lockedUntil: null,
+    blockedAt: null,
     createdAt: now,
     deletedAt: null,
   };

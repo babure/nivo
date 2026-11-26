@@ -49,8 +49,10 @@ describe("ConsultancyService", () => {
       googleSub: null,
       avatarUrl: null,
       passwordSet: true,
+      isBootstrap: false,
       failedLoginCount: 0,
       lockedUntil: null,
+      blockedAt: null,
       createdAt: now,
       deletedAt: null,
     });

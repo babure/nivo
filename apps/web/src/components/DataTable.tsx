@@ -129,10 +129,11 @@ export function DataTable<T>({
                 {hg.headers.map((header) => {
                   const canSort = header.column.getCanSort() && !loading;
                   const sorted = header.column.getIsSorted();
+                  const align = header.column.columnDef.meta?.align;
                   return (
                     <th
                       key={header.id}
-                      className="table-th"
+                      className={`table-th ${align === "right" ? "text-right" : ""}`}
                       style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
                       scope="col"
                     >
@@ -198,11 +199,14 @@ export function DataTable<T>({
             {showRows &&
               table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="table-body-row">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className={cellClass}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const align = cell.column.columnDef.meta?.align;
+                    return (
+                      <td key={cell.id} className={`${cellClass} ${align === "right" ? "text-right" : ""}`}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
           </tbody>

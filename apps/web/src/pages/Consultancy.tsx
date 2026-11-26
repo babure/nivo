@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { inviteStudentSchema } from "@nivo/shared";
 import { Check, Copy, FileDown, MailPlus, Users } from "lucide-react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DataTable } from "../components/DataTable";
 import { Field, FieldGrid, Page } from "../components/Page";
 import { Skeleton, StatGridSkeleton } from "../components/Skeleton";
@@ -76,6 +77,7 @@ function ConsultancyDashboard() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [confirmInvite, setConfirmInvite] = useState(false);
 
   useEffect(() => {
     void api
@@ -100,8 +102,19 @@ function ConsultancyDashboard() {
     }
   }
 
-  async function onInviteStudent(e: FormEvent) {
+  function onInviteStudent(e: FormEvent) {
     e.preventDefault();
+    const draft: { email: string; fullName?: string } = { email: inviteEmail.trim() };
+    if (inviteName.trim()) draft.fullName = inviteName.trim();
+    const parsed = inviteStudentSchema.safeParse(draft);
+    if (!parsed.success) {
+      toast.error("Check the form", parsed.error.issues[0]?.message ?? "Enter a valid email.");
+      return;
+    }
+    setConfirmInvite(true);
+  }
+
+  async function doInviteStudent() {
     const draft: { email: string; fullName?: string } = { email: inviteEmail.trim() };
     if (inviteName.trim()) draft.fullName = inviteName.trim();
     const parsed = inviteStudentSchema.safeParse(draft);
@@ -119,6 +132,7 @@ function ConsultancyDashboard() {
         "Invite sent",
         `${res.email} got your referral link (${res.link}). They register themselves from that email.`,
       );
+      setConfirmInvite(false);
       setInviteEmail("");
       setInviteName("");
     } catch (err) {
@@ -316,6 +330,18 @@ function ConsultancyDashboard() {
           />
         </div>
       </Page>
+
+      <ConfirmDialog
+        open={confirmInvite}
+        title="Send referral invite?"
+        description={`An email with your join link goes to ${inviteEmail.trim()}${
+          inviteName.trim() ? ` (${inviteName.trim()})` : ""
+        }.`}
+        confirmLabel="Send invite"
+        busy={inviteBusy}
+        onClose={() => setConfirmInvite(false)}
+        onConfirm={() => doInviteStudent()}
+      />
     </ConsultancyLayout>
   );
 }

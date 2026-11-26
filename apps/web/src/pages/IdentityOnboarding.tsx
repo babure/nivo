@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { identitySchema } from "@nivo/shared";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Field, FieldGrid, FormSection, Page } from "../components/Page";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button } from "../components/Button";
@@ -56,6 +57,7 @@ export default function IdentityOnboarding() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [prefilled, setPrefilled] = useState(false);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
 
   // Account email/name/phone already known from login or Google — never ask again.
   useEffect(() => {
@@ -94,13 +96,21 @@ export default function IdentityOnboarding() {
     return false;
   }
 
-  async function next() {
+  function next() {
     if (!validateStep()) return;
-    if (step < STEPS.length - 1) return setStep(step + 1);
+    if (step < STEPS.length - 1) {
+      setStep(step + 1);
+      return;
+    }
+    setConfirmSubmit(true);
+  }
+
+  async function doSubmitIdentity() {
     setBusy(true);
     try {
       await api.put("/v1/identity", identitySchema.parse(effective()));
       toast.success("Details saved");
+      setConfirmSubmit(false);
       navigate("/dashboard");
     } catch (err) {
       toast.error(
@@ -243,6 +253,16 @@ export default function IdentityOnboarding() {
           </div>
         </form>
       </div>
+
+      <ConfirmDialog
+        open={confirmSubmit}
+        title="Submit your identity details?"
+        description="This unlocks the next steps on your path. You can update details later from Documents if needed."
+        confirmLabel="Submit details"
+        busy={busy}
+        onClose={() => setConfirmSubmit(false)}
+        onConfirm={() => doSubmitIdentity()}
+      />
     </Page>
   );
 }

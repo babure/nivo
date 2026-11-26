@@ -7,7 +7,10 @@ async function promote(
   role: string,
 ) {
   const u = (await repos.users.findByEmail(email))!;
-  await repos.users.update(u.id, { role });
+  await repos.users.update(u.id, {
+    role,
+    ...(role === "super_admin" ? { isBootstrap: true } : {}),
+  });
 }
 
 describe("admin routes + permissions middleware", () => {

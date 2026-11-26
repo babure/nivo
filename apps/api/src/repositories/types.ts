@@ -16,8 +16,11 @@ export type UserRecord = {
   googleSub: string | null;
   avatarUrl: string | null;
   passwordSet: boolean;
+  /** Env-bootstrapped original super_admin */
+  isBootstrap: boolean;
   failedLoginCount: number;
   lockedUntil: Date | null;
+  blockedAt: Date | null;
   createdAt: Date;
   deletedAt: Date | null;
 };
@@ -268,15 +271,24 @@ export interface ClickRepo {
   countByKey(): Promise<Record<string, number>>;
 }
 
-export type ConsultancyRecord = { id: string; name: string; referralCode: string };
+export type ConsultancyRecord = {
+  id: string;
+  name: string;
+  referralCode: string;
+  active: boolean;
+  deletedAt: Date | null;
+};
 
 export interface ConsultancyRepo {
-  create(input: { id: string; name: string; referralCode: string }): Promise<void>;
+  create(input: { id: string; name: string; referralCode: string; active?: boolean }): Promise<void>;
   list(): Promise<ConsultancyRecord[]>;
   findById(id: string): Promise<ConsultancyRecord | null>;
   findByReferralCode(code: string): Promise<ConsultancyRecord | null>;
+  setActive(id: string, active: boolean): Promise<ConsultancyRecord | null>;
+  softDelete(id: string, at: Date): Promise<ConsultancyRecord | null>;
   getMembership(userId: string): Promise<{ consultancyId: string; role: string } | null>;
   addMember(userId: string, consultancyId: string, role?: string): Promise<void>;
+  listMembers(consultancyId: string): Promise<{ userId: string; role: string }[]>;
   hasMembers(consultancyId: string): Promise<boolean>;
   /** students of the consultancy who consented to progress sharing */
   listSharedStudents(consultancyId: string): Promise<string[]>;

@@ -36,6 +36,20 @@
       "when": 1795625000000,
       "tag": "0004_drop_totp",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795700000000,
+      "tag": "0005_proof_review_note",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795710000000,
+      "tag": "0006_admin_block_partner_delete",
+      "breakpoints": true
     }
   ]
 }

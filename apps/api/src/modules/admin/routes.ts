@@ -440,9 +440,29 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(rows.join("\n"));
   });
 
-  app.get("/v1/admin/admins", { preHandler: requirePermission("admins:manage") }, async () => {
+  function assertBootstrapActor(actor: UserRecord): void {
+    if (!actor.isBootstrap || actor.role !== "super_admin") {
+      throw new AppError("FORBIDDEN", "Only the original bootstrap admin can block or delete team members.");
+    }
+  }
+
+  function assertAdminTarget(actor: UserRecord, target: UserRecord): void {
+    if (target.role !== "super_admin" || target.deletedAt) {
+      throw new AppError("NOT_FOUND", "Admin not found.");
+    }
+    if (target.id === actor.id) {
+      throw new AppError("FORBIDDEN", "You cannot block or delete your own admin account.");
+    }
+    if (target.isBootstrap) {
+      throw new AppError("FORBIDDEN", "The original bootstrap admin cannot be blocked or deleted.");
+    }
+  }
+
+  app.get("/v1/admin/admins", { preHandler: requirePermission("admins:manage") }, async (req) => {
+    const ctx = requireAuthContext(req);
     const users = await repos.users.list();
     return {
+      viewerIsBootstrap: Boolean(ctx.user.isBootstrap),
       admins: users
         .filter((u) => u.role === "super_admin" && !u.deletedAt)
         .map((u) => ({
@@ -450,6 +470,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           email: u.email,
           fullName: u.fullName,
           createdAt: u.createdAt,
+          isBootstrap: u.isBootstrap,
+          blockedAt: u.blockedAt,
+          canManage: Boolean(ctx.user.isBootstrap) && !u.isBootstrap && u.id !== ctx.user.id,
         })),
     };
   });
@@ -481,8 +504,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       googleSub: null,
       avatarUrl: null,
       passwordSet: true,
+      isBootstrap: false,
       failedLoginCount: 0,
       lockedUntil: null,
+      blockedAt: null,
       createdAt: now,
       deletedAt: null,
     };
@@ -503,6 +528,84 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     });
     return reply.code(201).send({ id: user.id, email: user.email, fullName: user.fullName });
   });
+
+  app.post(
+    "/v1/admin/admins/:id/block",
+    { preHandler: requirePermission("admins:manage") },
+    async (req) => {
+      const { id } = parseStrict(idParams, req.params);
+      const { reason } = parseStrict(reasonBody, req.body);
+      const ctx = requireAuthContext(req);
+      assertBootstrapActor(ctx.user);
+      const target = await repos.users.findById(id);
+      if (!target) throw new AppError("NOT_FOUND", "Admin not found.");
+      assertAdminTarget(ctx.user, target);
+      if (target.blockedAt) throw new AppError("CONFLICT", "This admin is already blocked.");
+
+      const now = new Date();
+      await repos.users.update(id, { blockedAt: now });
+      await repos.sessions.deleteAllForUser(id);
+      await audit.append({
+        actorId: ctx.user.id,
+        action: "admins.blocked",
+        entityType: "user",
+        entityId: id,
+        meta: { reason, email: target.email },
+      });
+      return { id, blockedAt: now };
+    },
+  );
+
+  app.post(
+    "/v1/admin/admins/:id/unblock",
+    { preHandler: requirePermission("admins:manage") },
+    async (req) => {
+      const { id } = parseStrict(idParams, req.params);
+      const { reason } = parseStrict(reasonBody, req.body);
+      const ctx = requireAuthContext(req);
+      assertBootstrapActor(ctx.user);
+      const target = await repos.users.findById(id);
+      if (!target) throw new AppError("NOT_FOUND", "Admin not found.");
+      assertAdminTarget(ctx.user, target);
+      if (!target.blockedAt) throw new AppError("CONFLICT", "This admin is not blocked.");
+
+      await repos.users.update(id, { blockedAt: null });
+      await audit.append({
+        actorId: ctx.user.id,
+        action: "admins.unblocked",
+        entityType: "user",
+        entityId: id,
+        meta: { reason, email: target.email },
+      });
+      return { id, blockedAt: null };
+    },
+  );
+
+  app.post(
+    "/v1/admin/admins/:id/delete",
+    { preHandler: requirePermission("admins:manage") },
+    async (req) => {
+      const { id } = parseStrict(idParams, req.params);
+      const { reason } = parseStrict(reasonBody, req.body);
+      const ctx = requireAuthContext(req);
+      assertBootstrapActor(ctx.user);
+      const target = await repos.users.findById(id);
+      if (!target) throw new AppError("NOT_FOUND", "Admin not found.");
+      assertAdminTarget(ctx.user, target);
+
+      const now = new Date();
+      await repos.users.update(id, { deletedAt: now, blockedAt: now, role: "super_admin" });
+      await repos.sessions.deleteAllForUser(id);
+      await audit.append({
+        actorId: ctx.user.id,
+        action: "admins.deleted",
+        entityType: "user",
+        entityId: id,
+        meta: { reason, email: target.email },
+      });
+      return { id, deletedAt: now };
+    },
+  );
 
 
   async function inviteConsultancyManager(opts: {
@@ -537,8 +640,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       googleSub: null,
       avatarUrl: null,
       passwordSet: false,
+      isBootstrap: false,
       failedLoginCount: 0,
       lockedUntil: null,
+      blockedAt: null,
       createdAt: now,
       deletedAt: null,
     };
@@ -546,6 +651,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     await repos.consultancies.addMember(user.id, opts.consultancyId, "owner");
     await app.services.auth.sendConsultancyInvite(user.id, opts.orgName);
     return { id: user.id, email: user.email, inviteSent: true };
+  }
+
+  async function setConsultancyManagersBlocked(consultancyId: string, blocked: boolean, now: Date): Promise<number> {
+    const members = await repos.consultancies.listMembers(consultancyId);
+    let count = 0;
+    for (const m of members) {
+      const user = await repos.users.findById(m.userId);
+      if (!user || user.role !== "consultancy") continue;
+      await repos.users.update(user.id, { blockedAt: blocked ? now : null });
+      if (blocked) await repos.sessions.deleteAllForUser(user.id);
+      count += 1;
+    }
+    return count;
   }
 
   app.get("/v1/admin/consultancies", { preHandler: requirePermission("consultancies:manage") }, async () => {
@@ -556,6 +674,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         name: c.name,
         code: c.referralCode,
         link: `/r/${c.referralCode}`,
+        active: c.active,
         hasManager: await repos.consultancies.hasMembers(c.id),
       })),
     );
@@ -630,6 +749,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
       const org = await repos.consultancies.findById(id);
       if (!org) throw new AppError("NOT_FOUND", "Consultancy not found.");
+      if (!org.active) throw new AppError("CONFLICT", "Reactivate this partner before inviting a manager.");
 
       const manager = await inviteConsultancyManager({
         consultancyId: org.id,
@@ -647,6 +767,86 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       });
 
       return reply.code(201).send({ manager });
+    },
+  );
+
+  app.post(
+    "/v1/admin/consultancies/:id/deactivate",
+    { preHandler: requirePermission("consultancies:manage") },
+    async (req) => {
+      const { id } = parseStrict(idParams, req.params);
+      const { reason } = parseStrict(reasonBody, req.body);
+      const ctx = requireAuthContext(req);
+      const org = await repos.consultancies.findById(id);
+      if (!org) throw new AppError("NOT_FOUND", "Consultancy not found.");
+      if (!org.active) throw new AppError("CONFLICT", "This partner is already blocked.");
+
+      const now = new Date();
+      await repos.consultancies.setActive(id, false);
+      const managersBlocked = await setConsultancyManagersBlocked(id, true, now);
+      await audit.append({
+        actorId: ctx.user.id,
+        action: "consultancies.deactivated",
+        entityType: "consultancy",
+        entityId: id,
+        meta: { reason, code: org.referralCode, managersBlocked },
+      });
+      return { id, active: false, managersBlocked };
+    },
+  );
+
+  app.post(
+    "/v1/admin/consultancies/:id/activate",
+    { preHandler: requirePermission("consultancies:manage") },
+    async (req) => {
+      const { id } = parseStrict(idParams, req.params);
+      const { reason } = parseStrict(reasonBody, req.body);
+      const ctx = requireAuthContext(req);
+      const org = await repos.consultancies.findById(id);
+      if (!org) throw new AppError("NOT_FOUND", "Consultancy not found.");
+      if (org.active) throw new AppError("CONFLICT", "This partner is already active.");
+
+      const now = new Date();
+      await repos.consultancies.setActive(id, true);
+      const managersUnblocked = await setConsultancyManagersBlocked(id, false, now);
+      await audit.append({
+        actorId: ctx.user.id,
+        action: "consultancies.activated",
+        entityType: "consultancy",
+        entityId: id,
+        meta: { reason, code: org.referralCode, managersUnblocked },
+      });
+      return { id, active: true, managersUnblocked };
+    },
+  );
+
+  app.post(
+    "/v1/admin/consultancies/:id/delete",
+    { preHandler: requirePermission("consultancies:manage") },
+    async (req) => {
+      const { id } = parseStrict(idParams, req.params);
+      const { reason } = parseStrict(reasonBody, req.body);
+      const ctx = requireAuthContext(req);
+      const org = await repos.consultancies.findById(id);
+      if (!org) throw new AppError("NOT_FOUND", "Consultancy not found.");
+
+      const now = new Date();
+      const members = await repos.consultancies.listMembers(id);
+      for (const m of members) {
+        const user = await repos.users.findById(m.userId);
+        if (!user || user.role !== "consultancy") continue;
+        await repos.users.update(user.id, { deletedAt: now, blockedAt: now });
+        await repos.sessions.deleteAllForUser(user.id);
+      }
+      await repos.consultancies.softDelete(id, now);
+      await audit.append({
+        actorId: ctx.user.id,
+        action: "consultancies.deleted",
+        entityType: "consultancy",
+        entityId: id,
+        meta: { reason, code: org.referralCode, managersRemoved: members.length },
+      });
+      return { id, deletedAt: now };
     },
   );
 }

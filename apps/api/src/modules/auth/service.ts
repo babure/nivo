@@ -158,8 +158,10 @@ export class AuthService {
       googleSub: null,
       avatarUrl: null,
       passwordSet: true,
+      isBootstrap: false,
       failedLoginCount: 0,
       lockedUntil: null,
+      blockedAt: null,
       createdAt: now,
       deletedAt: null,
     };
@@ -171,9 +173,10 @@ export class AuthService {
       throw err;
     }
 
-    const consultancy = input.referralCode
+    const foundReferral = input.referralCode
       ? await repos.consultancies.findByReferralCode(input.referralCode)
       : null;
+    const consultancy = foundReferral?.active ? foundReferral : null;
     const profile: ProfileRecord = {
       userId: user.id,
       paymentStatus: "unpaid",
@@ -305,8 +308,10 @@ export class AuthService {
         googleSub: profile.sub,
         avatarUrl,
         passwordSet: false,
+        isBootstrap: false,
         failedLoginCount: 0,
         lockedUntil: null,
+        blockedAt: null,
         createdAt: now,
         deletedAt: null,
       };
@@ -314,9 +319,10 @@ export class AuthService {
         await repos.users.create(newUser);
         user = newUser;
         created = true;
-        const consultancy = opts.referralCode
+        const foundReferral = opts.referralCode
           ? await repos.consultancies.findByReferralCode(opts.referralCode)
           : null;
+        const consultancy = foundReferral?.active ? foundReferral : null;
         const share =
           Boolean(consultancy) && opts.shareProgressWithConsultancy === true;
         await repos.profiles.upsert({
@@ -380,6 +386,9 @@ export class AuthService {
     if (user.lockedUntil && user.lockedUntil > now) {
       throw new AppError("AUTH_LOCKED", "Too many failed attempts. Try again later.");
     }
+    if (user.blockedAt) {
+      throw new AppError("AUTH_ACCOUNT_BLOCKED", "This account has been blocked. Contact support.");
+    }
 
     await repos.users.update(user.id, { failedLoginCount: 0, lockedUntil: null });
     const sessionToken = newToken();
@@ -416,6 +425,10 @@ export class AuthService {
 
     if (user.lockedUntil && user.lockedUntil > now) {
       throw new AppError("AUTH_LOCKED", "Too many failed attempts. Try again later.");
+    }
+
+    if (user.blockedAt) {
+      throw new AppError("AUTH_ACCOUNT_BLOCKED", "This account has been blocked. Contact support.");
     }
 
     if (!user.passwordSet) {
@@ -472,6 +485,10 @@ export class AuthService {
     }
     const user = await this.deps.repos.users.findById(session.userId);
     if (!user) return null;
+    if (user.blockedAt) {
+      await this.deps.repos.sessions.deleteAllForUser(user.id);
+      return null;
+    }
     return { user, sessionId, permissions: permissionsFor(user) };
   }
 
@@ -640,7 +657,7 @@ export class AuthService {
 
     if (input.code?.trim()) {
       const found = await this.deps.repos.consultancies.findByReferralCode(input.code.trim());
-      if (!found) {
+      if (!found || !found.active) {
         throw new AppError("NOT_FOUND", "That referral code is not recognised.");
       }
       if (consultancyId && consultancyId !== found.id) {

@@ -137,6 +137,29 @@
     @apply font-medium text-charcoal;
   }
 
+  /* Right-aligned row actions — keep Block/Delete/etc. on one baseline across tables */
+  .table-actions {
+    @apply inline-flex flex-nowrap items-center justify-end gap-1.5;
+  }
+
+  .btn-table {
+    @apply inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl
+      border border-charcoal/15 bg-white px-2.5 text-xs font-medium text-charcoal
+      hover:border-charcoal/25 hover:bg-mist/60 disabled:opacity-50;
+  }
+
+  .btn-table-danger {
+    @apply inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl
+      border border-red-300 bg-white px-2.5 text-xs font-medium text-red-800
+      hover:border-red-400 hover:bg-red-50 disabled:opacity-50;
+  }
+
+  .btn-table-icon {
+    @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl
+      border border-charcoal/15 bg-white text-charcoal
+      hover:border-charcoal/25 hover:bg-mist/60 disabled:opacity-50;
+  }
+
   .table-meta {
     @apply text-xs text-charcoal-soft;
   }

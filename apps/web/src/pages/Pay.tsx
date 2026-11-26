@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { SERVICE_CURRENCY, SERVICE_FEE_CENTS } from "@nivo/shared";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Page } from "../components/Page";
 import { CreditCard } from "lucide-react";
 import { Button } from "../components/Button";
@@ -29,6 +30,7 @@ export default function Pay() {
   const [withdrawalVersion, setWithdrawalVersion] = useState("");
   const [versionsReady, setVersionsReady] = useState(false);
   const [acceptAgain, setAcceptAgain] = useState<string | null>(null);
+  const [confirmDemo, setConfirmDemo] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("payment") === "cancelled" || searchParams.get("payment") === "cancel") {
@@ -196,7 +198,7 @@ export default function Pay() {
               <p className="text-sm">
                 Stripe is not configured here. Complete a <strong>demo payment</strong> to continue.
               </p>
-              <Button className="w-full" onClick={() => void completeDemoPayment()} disabled={busy}>
+              <Button className="w-full" onClick={() => setConfirmDemo(true)} disabled={busy}>
                 <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
                 {busy ? "Confirming…" : "Complete payment (demo)"}
               </Button>
@@ -205,6 +207,19 @@ export default function Pay() {
         </div>
         <p className="mt-3 text-xs text-charcoal-soft">Secure Stripe Checkout. See Withdrawal for refund terms.</p>
       </div>
+
+      <ConfirmDialog
+        open={confirmDemo}
+        title="Complete demo payment?"
+        description={`Marks your account as paid (${eurPrice}) without Stripe. Use only in demo/test environments.`}
+        confirmLabel="Complete demo payment"
+        busy={busy}
+        onClose={() => setConfirmDemo(false)}
+        onConfirm={async () => {
+          setConfirmDemo(false);
+          await completeDemoPayment();
+        }}
+      />
     </Page>
   );
 }

@@ -7,7 +7,14 @@ import { createProof, decideProof, getProof, listProofs } from "./store.js";
 
 const keyParams = z.object({ key: z.string().regex(/^[a-z0-9_]{1,64}$/) });
 const idParams = z.object({ id: z.string().uuid() });
-const decideBody = z.object({ decision: z.enum(["approved", "rejected"]) });
+const decideBody = z.object({
+  decision: z.enum(["approved", "rejected"]),
+  reviewNote: z
+    .string()
+    .trim()
+    .max(500, "Note is too long (max 500 characters)")
+    .optional(),
+});
 
 export async function proofsRoutes(app: FastifyInstance): Promise<void> {
   const { repos, cards, audit, identity } = app.services;
@@ -56,6 +63,7 @@ export async function proofsRoutes(app: FastifyInstance): Promise<void> {
         id: p.id,
         cardKey: p.cardKey,
         status: p.status,
+        reviewNote: p.status === "rejected" ? p.reviewNote : null,
         createdAt: p.createdAt,
       })),
     };
@@ -111,13 +119,21 @@ export async function proofsRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [app.requireAuth, requirePermission("proofs:approve")] },
     async (req) => {
       const { id } = parseStrict(idParams, req.params);
-      const { decision } = parseStrict(decideBody, req.body);
+      const body = parseStrict(decideBody, req.body);
+      const { decision } = body;
+      const note = body.reviewNote?.trim() ?? "";
+      if (decision === "rejected" && note.length < 10) {
+        throw new AppError("VALIDATION_FAILED", "Give the student a reason of at least 10 characters", [
+          { path: "reviewNote", code: "too_small", message: "Give the student a reason of at least 10 characters" },
+        ]);
+      }
+      const reviewNote = note.length > 0 ? note : null;
       const ctx = requireAuthContext(req);
       const existing = await getProof(id);
       if (!existing) throw new AppError("NOT_FOUND", "Proof not found.");
       if (existing.status !== "pending") throw new AppError("CONFLICT", "Proof already decided.");
 
-      const updated = await decideProof(id, decision, ctx.user.id);
+      const updated = await decideProof(id, decision, ctx.user.id, reviewNote);
       if (!updated) throw new AppError("CONFLICT", "Proof already decided.");
 
       if (decision === "approved") {
@@ -132,7 +148,11 @@ export async function proofsRoutes(app: FastifyInstance): Promise<void> {
         action: decision === "approved" ? "proofs.approved" : "proofs.rejected",
         entityType: "proof",
         entityId: id,
-        meta: { cardKey: existing.cardKey, userId: existing.userId },
+        meta: {
+          cardKey: existing.cardKey,
+          userId: existing.userId,
+          ...(reviewNote ? { reviewNote } : {}),
+        },
       });
 
       return { proof: updated };

@@ -20,10 +20,12 @@ describe("bootstrapAdmin", () => {
     const user = await repos.users.findByEmail("boot@nivo.test");
     expect(user?.role).toBe("super_admin");
     expect(user?.fullName).toBe("Boot Admin");
+    expect(user?.isBootstrap).toBe(true);
     expect(log.info).toHaveBeenCalled();
 
     await bootstrapAdmin(repos, config, log);
     const all = (await repos.users.list()).filter((u) => u.role === "super_admin");
     expect(all).toHaveLength(1);
+    expect(all.filter((u) => u.isBootstrap)).toHaveLength(1);
   });
 });

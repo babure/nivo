@@ -11,6 +11,7 @@ export type ProofRecord = {
   status: "pending" | "approved" | "rejected";
   reviewedBy: string | null;
   reviewedAt: Date | null;
+  reviewNote: string | null;
   createdAt: Date;
 };
 
@@ -19,6 +20,30 @@ let db: Db | null = null;
 
 export function bindProofsDb(database: Db | null): void {
   db = database;
+}
+
+function mapRow(r: {
+  id: string;
+  userId: string;
+  cardKey: string;
+  fileId: string | null;
+  status: string;
+  reviewedBy: string | null;
+  reviewedAt: Date | null;
+  reviewNote: string | null;
+  createdAt: Date;
+}): ProofRecord {
+  return {
+    id: r.id,
+    userId: r.userId,
+    cardKey: r.cardKey,
+    fileId: r.fileId,
+    status: r.status as ProofRecord["status"],
+    reviewedBy: r.reviewedBy,
+    reviewedAt: r.reviewedAt,
+    reviewNote: r.reviewNote,
+    createdAt: r.createdAt,
+  };
 }
 
 export async function createProof(input: {
@@ -34,6 +59,7 @@ export async function createProof(input: {
     status: "pending",
     reviewedBy: null,
     reviewedAt: null,
+    reviewNote: null,
     createdAt: new Date(),
   };
   if (!db) {
@@ -64,38 +90,21 @@ export async function listProofs(filter?: {
   const rows = await db.select().from(s.proofs).orderBy(desc(s.proofs.createdAt));
   return rows
     .filter((r) => (!filter?.status || r.status === filter.status) && (!filter?.userId || r.userId === filter.userId))
-    .map((r) => ({
-      id: r.id,
-      userId: r.userId,
-      cardKey: r.cardKey,
-      fileId: r.fileId,
-      status: r.status as ProofRecord["status"],
-      reviewedBy: r.reviewedBy,
-      reviewedAt: r.reviewedAt,
-      createdAt: r.createdAt,
-    }));
+    .map(mapRow);
 }
 
 export async function getProof(id: string): Promise<ProofRecord | null> {
   if (!db) return memory.get(id) ?? null;
   const [row] = await db.select().from(s.proofs).where(eq(s.proofs.id, id)).limit(1);
   if (!row) return null;
-  return {
-    id: row.id,
-    userId: row.userId,
-    cardKey: row.cardKey,
-    fileId: row.fileId,
-    status: row.status as ProofRecord["status"],
-    reviewedBy: row.reviewedBy,
-    reviewedAt: row.reviewedAt,
-    createdAt: row.createdAt,
-  };
+  return mapRow(row);
 }
 
 export async function decideProof(
   id: string,
   decision: "approved" | "rejected",
   reviewerId: string,
+  reviewNote: string | null = null,
 ): Promise<ProofRecord | null> {
   if (!db) {
     const rec = memory.get(id);
@@ -103,24 +112,21 @@ export async function decideProof(
     rec.status = decision;
     rec.reviewedBy = reviewerId;
     rec.reviewedAt = new Date();
+    rec.reviewNote = reviewNote;
     return { ...rec };
   }
   const [row] = await db
     .update(s.proofs)
-    .set({ status: decision, reviewedBy: reviewerId, reviewedAt: new Date() })
+    .set({
+      status: decision,
+      reviewedBy: reviewerId,
+      reviewedAt: new Date(),
+      reviewNote,
+    })
     .where(and(eq(s.proofs.id, id), eq(s.proofs.status, "pending")))
     .returning();
   if (!row) return null;
-  return {
-    id: row.id,
-    userId: row.userId,
-    cardKey: row.cardKey,
-    fileId: row.fileId,
-    status: row.status as ProofRecord["status"],
-    reviewedBy: row.reviewedBy,
-    reviewedAt: row.reviewedAt,
-    createdAt: row.createdAt,
-  };
+  return mapRow(row);
 }
 
 export function clearProofs(): void {

@@ -15,7 +15,7 @@ export class ConsultancyService {
     const trimmed = code.trim();
     if (!trimmed) return { valid: false as const };
     const c = await this.repos.consultancies.findByReferralCode(trimmed);
-    if (!c) return { valid: false as const };
+    if (!c || !c.active || c.deletedAt) return { valid: false as const };
     return { valid: true as const, id: c.id, name: c.name, code: c.referralCode, link: `/r/${c.referralCode}` };
   }
 

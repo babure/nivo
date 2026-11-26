@@ -31,6 +31,7 @@ import {
 } from "@nivo/shared";
 import { ActionTable, type ActionColumn } from "../components/ActionTable";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Dialog } from "../components/Dialog";
 import { Field, FieldGrid, FormSection, Page } from "../components/Page";
 import { Skeleton } from "../components/Skeleton";
@@ -72,6 +73,7 @@ export function Accommodation() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string>();
+  const [withdrawId, setWithdrawId] = useState<string | null>(null);
 
   const loadLeads = useCallback(async () => {
     try {
@@ -140,6 +142,7 @@ export function Accommodation() {
     try {
       await api.post(`/v1/accommodation/leads/${id}/withdraw`);
       toast.success("Enquiry withdrawn");
+      setWithdrawId(null);
       await loadLeads();
     } catch (err) {
       toast.error("Could not withdraw enquiry", err instanceof ApiError ? err.message : undefined);
@@ -200,22 +203,34 @@ export function Accommodation() {
           emptyAction={newEnquiryBtn}
           actions={(l) =>
             l.status !== "closed" && l.status !== "booked" ? (
-              <Button
+              <button
                 type="button"
-                variant="secondary"
-                className="h-8 px-2.5 text-xs"
+                className="btn-table"
                 disabled={busy}
-                onClick={() => void withdraw(l.id)}
+                onClick={() => setWithdrawId(l.id)}
               >
                 <Undo2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Withdraw
-              </Button>
+              </button>
             ) : (
               <span className="text-xs text-charcoal-soft">—</span>
             )
           }
         />
       </FormSection>
+
+      <ConfirmDialog
+        open={withdrawId !== null}
+        title="Withdraw this enquiry?"
+        description="We'll stop following up on this housing request. You can send a new enquiry anytime."
+        confirmLabel="Withdraw"
+        tone="danger"
+        busy={busy}
+        onClose={() => setWithdrawId(null)}
+        onConfirm={() => {
+          if (withdrawId) return withdraw(withdrawId);
+        }}
+      />
 
       <Dialog
         open={formOpen}
@@ -627,6 +642,11 @@ export function Documents() {
   const [viewing, setViewing] = useState<string>();
   const [deletingId, setDeletingId] = useState<string>();
   const [removeTarget, setRemoveTarget] = useState<FileRow | null>(null);
+  const [pendingReplace, setPendingReplace] = useState<{
+    kind: FileKind;
+    file: File;
+    replaceFileIds: string[];
+  } | null>(null);
   const otherInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -651,6 +671,20 @@ export function Documents() {
     void load();
   }, [load]);
 
+  function requestUploadKind(kind: FileKind, file: File | null, opts?: { replaceFileIds?: string[] }) {
+    if (!file) return;
+    const replaceIds =
+      opts?.replaceFileIds ??
+      (kind === "other"
+        ? []
+        : (identity?.files ?? []).filter((f) => f.kind === kind).map((f) => f.id));
+    if (replaceIds.length > 0) {
+      setPendingReplace({ kind, file, replaceFileIds: replaceIds });
+      return;
+    }
+    void uploadKind(kind, file, { replaceFileIds: replaceIds });
+  }
+
   async function uploadKind(kind: FileKind, file: File, opts?: { replaceFileIds?: string[] }) {
     if (file.size > MAX_UPLOAD_BYTES) {
       toast.error("File too large", `Maximum size is ${MAX_UPLOAD_MB} MB.`);
@@ -662,11 +696,7 @@ export function Documents() {
     }
     setUploadingKind(kind);
     try {
-      const replaceIds =
-        opts?.replaceFileIds ??
-        (kind === "other"
-          ? []
-          : (identity?.files ?? []).filter((f) => f.kind === kind).map((f) => f.id));
+      const replaceIds = opts?.replaceFileIds ?? [];
       await uploadFile(`/v1/identity/files?kind=${kind}`, file);
       for (const id of replaceIds) {
         try {
@@ -676,6 +706,7 @@ export function Documents() {
         }
       }
       toast.success("Uploaded", kindLabel(kind));
+      setPendingReplace(null);
       await load();
     } catch (err) {
       toast.error("Upload failed", err instanceof ApiError ? err.message : undefined);
@@ -897,7 +928,7 @@ export function Documents() {
                       busy={uploadingKind === kind.value || Boolean(file && deletingId === file.id)}
                       viewing={Boolean(file && viewing === file.id)}
                       downloading={Boolean(file && downloading === file.id)}
-                      onUpload={(f) => void uploadKind(kind.value, f)}
+                      onUpload={(f) => requestUploadKind(kind.value, f)}
                       onView={() => {
                         if (file) void viewFile(file);
                       }}
@@ -920,7 +951,7 @@ export function Documents() {
                     busy={deletingId === file.id || otherBusy}
                     viewing={viewing === file.id}
                     downloading={downloading === file.id}
-                    onUpload={(f) => void uploadKind("other", f, { replaceFileIds: [file.id] })}
+                    onUpload={(f) => requestUploadKind("other", f, { replaceFileIds: [file.id] })}
                     onView={() => void viewFile(file)}
                     onDownload={() => void downloadFile(file)}
                     onRemove={() => setRemoveTarget(file)}
@@ -936,8 +967,7 @@ export function Documents() {
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
-                    const f = e.dataTransfer.files?.[0];
-                    if (f) void uploadKind("other", f);
+                    requestUploadKind("other", e.dataTransfer.files?.[0] ?? null);
                   }}
                   className="flex min-h-[11.5rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-charcoal/20 bg-transparent px-3 py-5 text-center transition hover:border-orange/50 hover:bg-orange/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label={otherBusy ? "Uploading other document" : "Add other document"}
@@ -964,8 +994,7 @@ export function Documents() {
                   accept={OTHER_KIND.accept}
                   disabled={uploadsLocked || otherBusy}
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void uploadKind("other", f);
+                    requestUploadKind("other", e.target.files?.[0] ?? null);
                     e.target.value = "";
                   }}
                 />
@@ -987,10 +1016,10 @@ export function Documents() {
             emptyDescription="A receipt appears here after you activate your account."
             emptyIcon={FileText}
             actions={(inv) => (
-              <div className="flex flex-wrap items-center justify-end gap-1">
+              <>
                 <button
                   type="button"
-                  className="btn-secondary h-8 w-8 p-0"
+                  className="btn-table-icon"
                   disabled={!inv.documentId || viewing === inv.number}
                   onClick={() => void viewInvoice(inv)}
                   aria-label={
@@ -1002,7 +1031,7 @@ export function Documents() {
                 </button>
                 <button
                   type="button"
-                  className="btn-secondary h-8 w-8 p-0"
+                  className="btn-table-icon"
                   disabled={!inv.documentId || downloading === inv.number}
                   onClick={() => void downloadInvoice(inv)}
                   aria-label={
@@ -1016,7 +1045,7 @@ export function Documents() {
                 >
                   <Download className="h-3.5 w-3.5" aria-hidden />
                 </button>
-              </div>
+              </>
             )}
           />
         ) : (
@@ -1049,10 +1078,10 @@ export function Documents() {
             emptyDescription="Accept the Terms (at register or re-accept) to generate a copy here."
             emptyIcon={FileText}
             actions={(d) => (
-              <div className="flex flex-wrap items-center justify-end gap-1">
+              <>
                 <button
                   type="button"
-                  className="btn-secondary h-8 w-8 p-0"
+                  className="btn-table-icon"
                   disabled={viewing === d.id}
                   onClick={() => {
                     setViewing(d.id);
@@ -1072,7 +1101,7 @@ export function Documents() {
                 </button>
                 <button
                   type="button"
-                  className="btn-secondary h-8 w-8 p-0"
+                  className="btn-table-icon"
                   disabled={downloading === d.id}
                   onClick={() => {
                     setDownloading(d.id);
@@ -1088,13 +1117,13 @@ export function Documents() {
                 >
                   <Download className="h-3.5 w-3.5" aria-hidden />
                 </button>
-              </div>
+              </>
             )}
           />
         )}
       </div>
 
-      <Dialog
+      <ConfirmDialog
         open={removeTarget !== null}
         title="Remove document?"
         description={
@@ -1102,31 +1131,37 @@ export function Documents() {
             ? `${kindLabel(removeTarget.kind)} · ${Math.max(1, Math.round(removeTarget.sizeBytes / 1024))} KB will be deleted. You can upload again later.`
             : undefined
         }
+        confirmLabel="Remove"
+        tone="danger"
+        busy={Boolean(deletingId)}
         onClose={() => {
           if (!deletingId) setRemoveTarget(null);
         }}
-        footer={
-          <>
-            <Button
-              type="button"
-              className="btn-secondary"
-              disabled={Boolean(deletingId)}
-              onClick={() => setRemoveTarget(null)}
-            >
-              <X className="h-4 w-4 shrink-0" aria-hidden />
-              Cancel
-            </Button>
-            <Button type="button" disabled={Boolean(deletingId)} onClick={() => void confirmRemove()}>
-              <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-              {deletingId ? "Removing…" : "Remove"}
-            </Button>
-          </>
-        }
+        onConfirm={() => confirmRemove()}
       >
-        <p className="text-sm text-charcoal-soft">
-          This only removes the uploaded scan from NIVO. It does not change your passport details form.
-        </p>
-      </Dialog>
+        This only removes the uploaded scan from NIVO. It does not change your passport details form.
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={pendingReplace !== null}
+        title="Replace this document?"
+        description={
+          pendingReplace
+            ? `The existing ${kindLabel(pendingReplace.kind)} file will be removed after the new upload succeeds.`
+            : undefined
+        }
+        confirmLabel="Replace"
+        tone="danger"
+        busy={Boolean(pendingReplace && uploadingKind === pendingReplace.kind)}
+        onClose={() => setPendingReplace(null)}
+        onConfirm={() => {
+          if (pendingReplace) {
+            return uploadKind(pendingReplace.kind, pendingReplace.file, {
+              replaceFileIds: pendingReplace.replaceFileIds,
+            });
+          }
+        }}
+      />
     </Page>
   );
 }
@@ -1145,6 +1180,8 @@ export function Profile() {
   } | null>(null);
   const [referralCodeInput, setReferralCodeInput] = useState("");
   const [shareProgress, setShareProgress] = useState(false);
+  const [confirmDeletion, setConfirmDeletion] = useState(false);
+  const [confirmReferral, setConfirmReferral] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
 
@@ -1187,12 +1224,25 @@ export function Profile() {
     }
   }
 
-  async function saveReferral(e: FormEvent) {
+  function saveReferral(e: FormEvent) {
     e.preventDefault();
     if (!referral?.attributed && !referralCodeInput.trim()) {
       toast.error("Enter a referral code to link a consultancy");
       return;
     }
+    if (!referral?.attributed && referralCodeInput.trim()) {
+      const codeParsed = referralCodeSchema.safeParse(referralCodeInput.trim());
+      if (!codeParsed.success) {
+        toast.error("Check the form", codeParsed.error.issues[0]?.message ?? "Enter a valid referral code.");
+        return;
+      }
+      setConfirmReferral(true);
+      return;
+    }
+    void doSaveReferral();
+  }
+
+  async function doSaveReferral() {
     try {
       const body: { code?: string; shareProgressWithConsultancy: boolean } = {
         shareProgressWithConsultancy: shareProgress,
@@ -1213,6 +1263,7 @@ export function Profile() {
       setReferral(res);
       setShareProgress(res.shareProgressWithConsultancy);
       setReferralCodeInput("");
+      setConfirmReferral(false);
       toast.success(
         res.organisation ? `Linked with ${res.organisation.name}` : "Referral preferences saved",
       );
@@ -1224,13 +1275,18 @@ export function Profile() {
     }
   }
 
-  async function requestDeletion(e: FormEvent) {
+  function requestDeletion(e: FormEvent) {
     e.preventDefault();
+    setConfirmDeletion(true);
+  }
+
+  async function doRequestDeletion() {
     try {
       await api.post("/v1/me/deletion-request", {
         ...(user?.passwordSet ? { password: currentPassword || password } : { confirmEmail }),
       });
       toast.success("Deletion requested", "We’ll process it shortly.");
+      setConfirmDeletion(false);
       const role = user?.role;
       await signOut();
       navigate(logoutPathFor(role), { replace: true });
@@ -1415,6 +1471,25 @@ export function Profile() {
           </form>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeletion}
+        title="Request account deletion?"
+        description="You will be signed out. We process removal shortly — this cannot be undone from the app."
+        confirmLabel="Request deletion"
+        tone="danger"
+        onClose={() => setConfirmDeletion(false)}
+        onConfirm={() => doRequestDeletion()}
+      />
+
+      <ConfirmDialog
+        open={confirmReferral}
+        title="Link this consultancy?"
+        description={`Code ${referralCodeInput.trim().toUpperCase()} will be attributed to your account. This usually cannot be changed later.`}
+        confirmLabel="Link consultancy"
+        onClose={() => setConfirmReferral(false)}
+        onConfirm={() => doSaveReferral()}
+      />
     </Page>
   );
 }

@@ -179,8 +179,10 @@ async function createUser(
     googleSub: null,
     avatarUrl: null,
     passwordSet: true,
+    isBootstrap: account.role === "super_admin",
     failedLoginCount: 0,
     lockedUntil: null,
+    blockedAt: null,
     createdAt: now,
     deletedAt: null,
   });

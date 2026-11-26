@@ -69,6 +69,7 @@ export const consultancies = pgTable("consultancies", {
   referralCode: varchar("referral_code", { length: 32 }).notNull().unique(),
   active: boolean("active").notNull().default(true),
   createdAt: createdAt(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
 export const users = pgTable(
@@ -90,8 +91,12 @@ export const users = pgTable(
     avatarUrl: varchar("avatar_url", { length: 512 }),
     /** False for Google-only accounts until the user sets a password */
     passwordSet: boolean("password_set").notNull().default(true),
+    /** First env-bootstrapped super_admin — cannot be blocked/deleted by peers */
+    isBootstrap: boolean("is_bootstrap").notNull().default(false),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    /** Admin block — login and sessions rejected until cleared */
+    blockedAt: timestamp("blocked_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -278,6 +283,8 @@ export const proofs = pgTable("proofs", {
   status: proofStatusEnum("status").notNull().default("pending"),
   reviewedBy: uuid("reviewed_by").references(() => users.id),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  /** Admin note on decide — shown to the student when rejected. */
+  reviewNote: text("review_note"),
   createdAt: createdAt(),
 });
 

@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import {
   BadgeCheck,
+  Ban,
   Banknote,
   Building2,
   Check,
@@ -21,6 +22,7 @@ import {
   Settings,
   Settings2,
   StickyNote,
+  Trash2,
   UserCog,
   UserPlus,
   Users,
@@ -43,6 +45,7 @@ import { PermissionGate } from "../../components/guards";
 import { ActionTable, type ActionColumn } from "../../components/ActionTable";
 import { AsyncContent } from "../../components/AsyncContent";
 import { DataTable } from "../../components/DataTable";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Dialog } from "../../components/Dialog";
 import { IdentityRevealDialog, type RevealedIdentity } from "../../components/IdentityRevealDialog";
 import { PathStatusStrip } from "../../components/PathStatusStrip";
@@ -176,6 +179,10 @@ function StudentsPanel() {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [timelineReady, setTimelineReady] = useState(false);
   const [cardKeys, setCardKeys] = useState<string[]>(["blocked_account", "sim", "accommodation"]);
+  const [confirmMarkPaid, setConfirmMarkPaid] = useState(false);
+  const [confirmReveal, setConfirmReveal] = useState(false);
+  const [confirmExport, setConfirmExport] = useState(false);
+  const [pendingCard, setPendingCard] = useState<{ key: string; status: string } | null>(null);
 
   const manage = useMemo(
     () => (manageId ? students.find((s) => s.id === manageId) ?? null : null),
@@ -238,13 +245,12 @@ function StudentsPanel() {
     }
   }
 
-  async function markPaid(id: string) {
+  async function markPaid(id: string, reason: string) {
     setBusyId(id);
     try {
-      await api.post(`/v1/admin/students/${id}/mark-paid`, {
-        reason: "Manual mark paid from admin students panel.",
-      });
+      await api.post(`/v1/admin/students/${id}/mark-paid`, { reason });
       toast.success("Marked as paid", "Payment status updated for this student.");
+      setConfirmMarkPaid(false);
       await load();
     } catch (err) {
       toast.error("Mark paid failed", err instanceof ApiError ? err.message : undefined);
@@ -253,17 +259,15 @@ function StudentsPanel() {
     }
   }
 
-  async function setCard(id: string, key: string, status: string) {
+  async function setCard(id: string, key: string, status: string, reason: string) {
     setBusyId(id);
     try {
-      await api.post(`/v1/admin/students/${id}/cards/${key}/status`, {
-        status,
-        reason: `Admin set ${key} to ${status} from students panel.`,
-      });
+      await api.post(`/v1/admin/students/${id}/cards/${key}/status`, { status, reason });
       toast.success(
         "Card status updated",
         `${key.replaceAll("_", " ")} → ${status}. Shown in this table and on the student’s path.`,
       );
+      setPendingCard(null);
       await load();
     } catch (err) {
       toast.error("Card update failed", err instanceof ApiError ? err.message : undefined);
@@ -272,12 +276,13 @@ function StudentsPanel() {
     }
   }
 
-  async function revealIdentity(student: StudentRow) {
+  async function revealIdentity(student: StudentRow, reason: string) {
     setBusyId(student.id);
     try {
       const res = await api.post<RevealedIdentity>(`/v1/admin/students/${student.id}/identity/reveal`, {
-        reason: "Support review from admin students panel.",
+        reason,
       });
+      setConfirmReveal(false);
       setManageId(null);
       setRevealName(student.fullName);
       setReveal(res);
@@ -340,17 +345,16 @@ function StudentsPanel() {
           id: "actions",
           header: "",
           enableSorting: false,
-          size: 88,
+          size: 108,
+          meta: { align: "right" },
           cell: ({ row }) =>
             canManage ? (
-              <Button
-                type="button"
-                className="btn-secondary h-8 px-2.5 text-xs"
-                onClick={() => setManageId(row.original.id)}
-              >
-                <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Manage
-              </Button>
+              <div className="table-actions">
+                <button type="button" className="btn-table" onClick={() => setManageId(row.original.id)}>
+                  <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Manage
+                </button>
+              </div>
             ) : (
               <span className="text-xs text-charcoal-soft">—</span>
             ),
@@ -380,7 +384,7 @@ function StudentsPanel() {
         pageSizeOptions={[25, 50, 100]}
         toolbar={
           hasPermission(perms, "exports:students") ? (
-            <Button type="button" className="btn-secondary h-9 text-sm" onClick={() => void downloadStudentsCsv()}>
+            <Button type="button" className="btn-secondary h-9 text-sm" onClick={() => setConfirmExport(true)}>
               <FileDown className="h-4 w-4 shrink-0" aria-hidden />
               Export CSV
             </Button>
@@ -416,7 +420,7 @@ function StudentsPanel() {
 
             <div className="flex flex-wrap gap-2">
               {hasPermission(perms, "students:mark_paid") && manage.paymentStatus !== "paid" && (
-                <Button type="button" disabled={busy} onClick={() => void markPaid(manage.id)}>
+                <Button type="button" disabled={busy} onClick={() => setConfirmMarkPaid(true)}>
                   <Banknote className="h-4 w-4 shrink-0" aria-hidden />
                   Mark paid
                 </Button>
@@ -426,7 +430,7 @@ function StudentsPanel() {
                   type="button"
                   className="btn-secondary"
                   disabled={busy}
-                  onClick={() => void revealIdentity(manage)}
+                  onClick={() => setConfirmReveal(true)}
                 >
                   <ScanFace className="h-4 w-4 shrink-0" aria-hidden />
                   Reveal identity
@@ -449,7 +453,7 @@ function StudentsPanel() {
                       disabled={busy}
                       onChange={(e) => {
                         const status = e.target.value;
-                        if (status) void setCard(manage.id, key, status);
+                        if (status) setPendingCard({ key, status });
                       }}
                     >
                       <option value="">Set status…</option>
@@ -491,6 +495,80 @@ function StudentsPanel() {
           </div>
         ) : null}
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmExport}
+        title="Export students CSV?"
+        description="Downloads a CSV with student emails and path status for your team."
+        confirmLabel="Export CSV"
+        busy={false}
+        onClose={() => setConfirmExport(false)}
+        onConfirm={async () => {
+          setConfirmExport(false);
+          await downloadStudentsCsv();
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmMarkPaid && manage !== null}
+        title="Mark this student as paid?"
+        description={manage ? `${manage.fullName} will unlock the paid path.` : undefined}
+        confirmLabel="Mark paid"
+        busy={busyId === manage?.id}
+        onClose={() => setConfirmMarkPaid(false)}
+        reasonField={{
+          label: "Reason (audited)",
+          required: true,
+          minLength: 10,
+          placeholder: "e.g. Bank transfer received on 12 Mar",
+        }}
+        onConfirm={({ reason }) => {
+          if (manage && reason) return markPaid(manage.id, reason);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmReveal && manage !== null}
+        title="Reveal identity details?"
+        description={manage ? `Access to ${manage.fullName}'s passport data is audited.` : undefined}
+        confirmLabel="Reveal identity"
+        tone="danger"
+        busy={busyId === manage?.id}
+        onClose={() => setConfirmReveal(false)}
+        reasonField={{
+          label: "Reason for access (audited)",
+          required: true,
+          minLength: 10,
+          placeholder: "e.g. Verifying passport for blocked account support",
+        }}
+        onConfirm={({ reason }) => {
+          if (manage && reason) return revealIdentity(manage, reason);
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingCard !== null && manage !== null}
+        title="Update path card status?"
+        description={
+          pendingCard
+            ? `${pendingCard.key.replaceAll("_", " ")} → ${pendingCard.status.replaceAll("_", " ")}`
+            : undefined
+        }
+        confirmLabel="Update status"
+        busy={busyId === manage?.id}
+        onClose={() => setPendingCard(null)}
+        reasonField={{
+          label: "Reason (audited)",
+          required: true,
+          minLength: 10,
+          placeholder: "e.g. Student completed offline; marking completed",
+        }}
+        onConfirm={({ reason }) => {
+          if (manage && pendingCard && reason) {
+            return setCard(manage.id, pendingCard.key, pendingCard.status, reason);
+          }
+        }}
+      />
 
       <IdentityRevealDialog
         open={reveal !== null}
@@ -537,6 +615,7 @@ function LeadsPanel() {
   const [manageId, setManageId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmExport, setConfirmExport] = useState(false);
 
   const manage = useMemo(
     () => (manageId ? leads.find((l) => l.id === manageId) ?? null : null),
@@ -643,20 +722,23 @@ function LeadsPanel() {
           id: "actions",
           header: "",
           enableSorting: false,
-          size: 88,
+          size: 108,
+          meta: { align: "right" },
           cell: ({ row }) =>
             canUpdate ? (
-              <Button
-                type="button"
-                className="btn-secondary h-8 px-2.5 text-xs"
-                onClick={() => {
-                  setManageId(row.original.id);
-                  setNoteDraft("");
-                }}
-              >
-                <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Manage
-              </Button>
+              <div className="table-actions">
+                <button
+                  type="button"
+                  className="btn-table"
+                  onClick={() => {
+                    setManageId(row.original.id);
+                    setNoteDraft("");
+                  }}
+                >
+                  <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Manage
+                </button>
+              </div>
             ) : (
               <span className="text-xs text-charcoal-soft">View only</span>
             ),
@@ -683,11 +765,23 @@ function LeadsPanel() {
         pageSize={25}
         pageSizeOptions={[25, 50, 100]}
         toolbar={
-          <a className="btn-secondary h-9 text-sm no-underline" href={`${api.baseUrl}/v1/admin/exports/leads.csv`}>
+          <Button type="button" className="btn-secondary h-9 text-sm" onClick={() => setConfirmExport(true)}>
             <FileDown className="h-4 w-4 shrink-0" aria-hidden />
             Export CSV
-          </a>
+          </Button>
         }
+      />
+
+      <ConfirmDialog
+        open={confirmExport}
+        title="Export leads CSV?"
+        description="Downloads housing enquiry rows including phone numbers."
+        confirmLabel="Export CSV"
+        onClose={() => setConfirmExport(false)}
+        onConfirm={() => {
+          setConfirmExport(false);
+          window.location.assign(`${api.baseUrl}/v1/admin/exports/leads.csv`);
+        }}
       />
 
       <Dialog
@@ -780,6 +874,7 @@ function SettingsPanel() {
   const [simRules, setSimRules] = useState("blocked_account");
   const [notifyEmail, setNotifyEmail] = useState("");
   const [texts, setTexts] = useState<Record<string, string>>({});
+  const [confirmSim, setConfirmSim] = useState(false);
 
   useEffect(() => {
     void api
@@ -817,8 +912,12 @@ function SettingsPanel() {
     }
   }
 
-  async function saveSim(e: FormEvent) {
+  function saveSim(e: FormEvent) {
     e.preventDefault();
+    setConfirmSim(true);
+  }
+
+  async function doSaveSim() {
     try {
       const requiredCardKeys = simRules
         .split(",")
@@ -826,6 +925,7 @@ function SettingsPanel() {
         .filter(Boolean);
       await api.put("/v1/admin/settings/sim-rules", { requiredCardKeys });
       toast.success("SIM unlock rules saved");
+      setConfirmSim(false);
     } catch (err) {
       toast.error("Could not save SIM rules", err instanceof ApiError ? err.message : undefined);
     }
@@ -945,15 +1045,35 @@ function SettingsPanel() {
           </form>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmSim}
+        title="Save SIM unlock rules?"
+        description="This changes which cards students must complete before the SIM card unlocks."
+        confirmLabel="Save SIM rules"
+        onClose={() => setConfirmSim(false)}
+        onConfirm={() => doSaveSim()}
+      >
+        <p className="font-mono text-xs text-charcoal">{simRules || "(none)"}</p>
+      </ConfirmDialog>
     </Page>
   );
 }
 
-type AdminRow = { id: string; email: string; fullName: string };
+type AdminRow = {
+  id: string;
+  email: string;
+  fullName: string;
+  createdAt?: string;
+  isBootstrap?: boolean;
+  blockedAt?: string | null;
+  canManage?: boolean;
+};
 
 function TeamPanel() {
   const toast = useToast();
   const [admins, setAdmins] = useState<AdminRow[]>([]);
+  const [viewerIsBootstrap, setViewerIsBootstrap] = useState(false);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [email, setEmail] = useState("");
@@ -961,11 +1081,18 @@ function TeamPanel() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [confirmCreate, setConfirmCreate] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    id: string;
+    name: string;
+    kind: "block" | "unblock" | "delete";
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get<{ admins: AdminRow[] }>("/v1/admin/admins");
+      const res = await api.get<{ admins: AdminRow[]; viewerIsBootstrap?: boolean }>("/v1/admin/admins");
       setAdmins(res.admins);
+      setViewerIsBootstrap(Boolean(res.viewerIsBootstrap));
       setLoadError(undefined);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : "Could not load admins.");
@@ -985,10 +1112,20 @@ function TeamPanel() {
   function closeForm() {
     if (busy) return;
     setFormOpen(false);
+    setConfirmCreate(false);
   }
 
-  async function onCreate(e: FormEvent) {
+  function onCreate(e: FormEvent) {
     e.preventDefault();
+    const parsed = createAdminSchema.safeParse({ email, fullName, password });
+    if (!parsed.success) {
+      toast.error("Check the form", firstSchemaIssue(parsed.error.issues));
+      return;
+    }
+    setConfirmCreate(true);
+  }
+
+  async function doCreateAdmin() {
     const parsed = createAdminSchema.safeParse({ email, fullName, password });
     if (!parsed.success) {
       toast.error("Check the form", firstSchemaIssue(parsed.error.issues));
@@ -1001,10 +1138,39 @@ function TeamPanel() {
       setEmail("");
       setFullName("");
       setPassword("");
+      setConfirmCreate(false);
       setFormOpen(false);
       await load();
     } catch (err) {
       toast.error("Could not create admin", formatApiError(err, "Could not create admin"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doAdminAction(reason: string) {
+    if (!pendingAction) return;
+    setBusy(true);
+    try {
+      const path =
+        pendingAction.kind === "block"
+          ? `/v1/admin/admins/${pendingAction.id}/block`
+          : pendingAction.kind === "unblock"
+            ? `/v1/admin/admins/${pendingAction.id}/unblock`
+            : `/v1/admin/admins/${pendingAction.id}/delete`;
+      await api.post(path, { reason });
+      toast.success(
+        pendingAction.kind === "block"
+          ? "Admin blocked"
+          : pendingAction.kind === "unblock"
+            ? "Admin unblocked"
+            : "Admin deleted",
+        pendingAction.name,
+      );
+      setPendingAction(null);
+      await load();
+    } catch (err) {
+      toast.error("Could not update admin", formatApiError(err, "Action failed"));
     } finally {
       setBusy(false);
     }
@@ -1015,12 +1181,28 @@ function TeamPanel() {
       {
         key: "name",
         header: "Name",
-        cell: (a) => <span className="table-primary">{a.fullName}</span>,
+        cell: (a) => (
+          <div>
+            <span className="table-primary">{a.fullName}</span>
+            {a.isBootstrap ? (
+              <span className="ml-2 text-[0.65rem] font-medium uppercase tracking-wide text-orange-dark">
+                Original
+              </span>
+            ) : null}
+          </div>
+        ),
       },
       {
         key: "email",
         header: "Email",
         cell: (a) => <span className="table-meta">{a.email}</span>,
+      },
+      {
+        key: "status",
+        header: "Status",
+        cell: (a) => (
+          <StatusPill tone={a.blockedAt ? "warn" : "ok"}>{a.blockedAt ? "Blocked" : "Active"}</StatusPill>
+        ),
       },
     ],
     [],
@@ -1034,7 +1216,17 @@ function TeamPanel() {
   );
 
   return (
-    <Page title="Team" intro="Admin logins for /admin. First admin is bootstrapped on API startup." wide compact embedded>
+    <Page
+      title="Team"
+      intro={
+        viewerIsBootstrap
+          ? "You are the original bootstrap admin. Only you can block or delete other team logins."
+          : "Admin logins for /admin. Only the original bootstrap admin can block or delete teammates."
+      }
+      wide
+      compact
+      embedded
+    >
       <FormSection title="Admins" description="People who can sign in at /admin/login.">
         <div className="mb-3 flex justify-end">{ready && admins.length > 0 ? addAdminBtn : null}</div>
         <ActionTable
@@ -1047,6 +1239,43 @@ function TeamPanel() {
           emptyDescription="Create an admin login. The first super-admin may already be bootstrapped on API startup."
           emptyIcon={UserCog}
           emptyAction={addAdminBtn}
+          actions={(a) =>
+            a.canManage ? (
+              <>
+                {a.blockedAt ? (
+                  <button
+                    type="button"
+                    className="btn-table"
+                    disabled={busy}
+                    onClick={() => setPendingAction({ id: a.id, name: a.fullName, kind: "unblock" })}
+                  >
+                    Unblock
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-table"
+                    disabled={busy}
+                    onClick={() => setPendingAction({ id: a.id, name: a.fullName, kind: "block" })}
+                  >
+                    <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Block
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-table-danger"
+                  disabled={busy}
+                  onClick={() => setPendingAction({ id: a.id, name: a.fullName, kind: "delete" })}
+                >
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Delete
+                </button>
+              </>
+            ) : (
+              <span className="text-xs text-charcoal-soft">{a.isBootstrap ? "Protected" : "—"}</span>
+            )
+          }
         />
       </FormSection>
 
@@ -1090,11 +1319,68 @@ function TeamPanel() {
           </FieldGrid>
         </form>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmCreate}
+        title="Create this admin login?"
+        description={`${fullName.trim() || "This person"} (${email.trim()}) will get full admin access.`}
+        confirmLabel="Create admin"
+        tone="danger"
+        busy={busy}
+        onClose={() => setConfirmCreate(false)}
+        onConfirm={() => doCreateAdmin()}
+      />
+
+      <ConfirmDialog
+        open={pendingAction !== null}
+        title={
+          pendingAction?.kind === "block"
+            ? "Block this admin?"
+            : pendingAction?.kind === "unblock"
+              ? "Unblock this admin?"
+              : "Delete this admin?"
+        }
+        description={
+          pendingAction
+            ? pendingAction.kind === "delete"
+              ? `${pendingAction.name} will lose access permanently (soft-delete). Sessions end immediately.`
+              : pendingAction.kind === "block"
+                ? `${pendingAction.name} cannot sign in until unblocked.`
+                : `${pendingAction.name} can sign in again.`
+            : undefined
+        }
+        confirmLabel={
+          pendingAction?.kind === "block"
+            ? "Block admin"
+            : pendingAction?.kind === "unblock"
+              ? "Unblock admin"
+              : "Delete admin"
+        }
+        tone={pendingAction?.kind === "unblock" ? "default" : "danger"}
+        busy={busy}
+        onClose={() => setPendingAction(null)}
+        reasonField={{
+          label: "Reason (audited)",
+          required: true,
+          minLength: 10,
+          placeholder: "e.g. Left the ops team / compromised account",
+        }}
+        onConfirm={({ reason }) => {
+          if (reason) return doAdminAction(reason);
+        }}
+      />
     </Page>
   );
 }
 
-type PartnerRow = { id: string; name: string; code: string; link: string; hasManager: boolean };
+type PartnerRow = {
+  id: string;
+  name: string;
+  code: string;
+  link: string;
+  hasManager: boolean;
+  active?: boolean;
+};
 const partnerCol = createColumnHelper<PartnerRow>();
 
 function PartnersPanel() {
@@ -1113,6 +1399,13 @@ function PartnersPanel() {
   const [addName, setAddName] = useState("");
   const [loadError, setLoadError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [confirmCreate, setConfirmCreate] = useState(false);
+  const [confirmInvite, setConfirmInvite] = useState(false);
+  const [pendingPartner, setPendingPartner] = useState<{
+    id: string;
+    name: string;
+    kind: "deactivate" | "activate" | "delete";
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -1159,11 +1452,13 @@ function PartnersPanel() {
   function closeCreate() {
     if (busy || codeBusy) return;
     setCreateOpen(false);
+    setConfirmCreate(false);
   }
 
   function closeManager() {
     if (busy) return;
     setAddForId(null);
+    setConfirmInvite(false);
   }
 
   async function suggestCode(regenerate: boolean) {
@@ -1191,12 +1486,31 @@ function PartnersPanel() {
     }
   }
 
-  async function onCreate(e: FormEvent) {
+  function onCreate(e: FormEvent) {
     e.preventDefault();
     if (!code.trim()) {
       toast.error("Generate a referral code first");
       return;
     }
+    const draft: {
+      name: string;
+      code: string;
+      managerEmail?: string;
+      managerName?: string;
+    } = { name, code };
+    if (managerEmail.trim()) {
+      draft.managerEmail = managerEmail.trim();
+      if (managerName.trim()) draft.managerName = managerName.trim();
+    }
+    const parsed = createConsultancySchema.safeParse(draft);
+    if (!parsed.success) {
+      toast.error("Check the form", firstSchemaIssue(parsed.error.issues));
+      return;
+    }
+    setConfirmCreate(true);
+  }
+
+  async function doCreateConsultancy() {
     const draft: {
       name: string;
       code: string;
@@ -1225,6 +1539,7 @@ function PartnersPanel() {
           : `Add a manager so they can join. Student join link ${created.link}`,
       );
       resetCreateForm();
+      setConfirmCreate(false);
       setCreateOpen(false);
       await load();
     } catch (err) {
@@ -1234,8 +1549,21 @@ function PartnersPanel() {
     }
   }
 
-  async function onAddManager(e: FormEvent) {
+  function onAddManager(e: FormEvent) {
     e.preventDefault();
+    if (!addForId) return;
+    const parsed = addManagerSchema.safeParse({
+      email: addEmail.trim(),
+      ...(addName.trim() ? { fullName: addName.trim() } : {}),
+    });
+    if (!parsed.success) {
+      toast.error("Check the form", firstSchemaIssue(parsed.error.issues));
+      return;
+    }
+    setConfirmInvite(true);
+  }
+
+  async function doInviteManager() {
     if (!addForId) return;
     const parsed = addManagerSchema.safeParse({
       email: addEmail.trim(),
@@ -1249,12 +1577,41 @@ function PartnersPanel() {
     try {
       await api.post(`/v1/admin/consultancies/${addForId}/managers`, parsed.data);
       toast.success("Invite sent", "They will get an email to set a password and join the consultancy portal.");
+      setConfirmInvite(false);
       setAddForId(null);
       setAddEmail("");
       setAddName("");
       await load();
     } catch (err) {
       toast.error("Could not invite manager", formatApiError(err, "Could not invite manager"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doPartnerAction(reason: string) {
+    if (!pendingPartner) return;
+    setBusy(true);
+    try {
+      const path =
+        pendingPartner.kind === "deactivate"
+          ? `/v1/admin/consultancies/${pendingPartner.id}/deactivate`
+          : pendingPartner.kind === "activate"
+            ? `/v1/admin/consultancies/${pendingPartner.id}/activate`
+            : `/v1/admin/consultancies/${pendingPartner.id}/delete`;
+      await api.post(path, { reason });
+      toast.success(
+        pendingPartner.kind === "deactivate"
+          ? "Partner blocked"
+          : pendingPartner.kind === "activate"
+            ? "Partner reactivated"
+            : "Partner deleted",
+        pendingPartner.name,
+      );
+      setPendingPartner(null);
+      await load();
+    } catch (err) {
+      toast.error("Could not update partner", formatApiError(err, "Action failed"));
     } finally {
       setBusy(false);
     }
@@ -1271,17 +1628,26 @@ function PartnersPanel() {
           header: "Code",
           cell: (info) => <span className="table-code">{info.getValue()}</span>,
         }),
+        partnerCol.accessor("active", {
+          header: "Status",
+          cell: (info) => (
+            <StatusPill tone={info.getValue() === false ? "warn" : "ok"}>
+              {info.getValue() === false ? "Blocked" : "Active"}
+            </StatusPill>
+          ),
+        }),
         partnerCol.accessor("hasManager", {
           header: "Manager",
-          cell: (info) =>
-            info.getValue() ? (
-              <span className="table-meta">Ready</span>
-            ) : (
+          cell: (info) => {
+            const row = info.row.original;
+            if (info.getValue()) return <span className="table-meta">Ready</span>;
+            if (row.active === false) return <span className="table-meta">—</span>;
+            return (
               <button
                 type="button"
                 className="text-xs font-medium text-orange-dark underline"
                 onClick={() => {
-                  setAddForId(info.row.original.id);
+                  setAddForId(row.id);
                   setAddEmail("");
                   setAddName("");
                 }}
@@ -1289,7 +1655,8 @@ function PartnersPanel() {
                 <UserPlus className="mr-1 inline h-3.5 w-3.5" aria-hidden />
                 Invite manager
               </button>
-            ),
+            );
+          },
         }),
         partnerCol.accessor("link", {
           header: "Join link",
@@ -1308,8 +1675,49 @@ function PartnersPanel() {
             </div>
           ),
         }),
+        partnerCol.display({
+          id: "actions",
+          header: "Actions",
+          meta: { align: "right" },
+          cell: (info) => {
+            const row = info.row.original;
+            return (
+              <div className="table-actions">
+                {row.active === false ? (
+                  <button
+                    type="button"
+                    className="btn-table"
+                    disabled={busy}
+                    onClick={() => setPendingPartner({ id: row.id, name: row.name, kind: "activate" })}
+                  >
+                    Unblock
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-table"
+                    disabled={busy}
+                    onClick={() => setPendingPartner({ id: row.id, name: row.name, kind: "deactivate" })}
+                  >
+                    <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Block
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-table-danger"
+                  disabled={busy}
+                  onClick={() => setPendingPartner({ id: row.id, name: row.name, kind: "delete" })}
+                >
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Delete
+                </button>
+              </div>
+            );
+          },
+        }),
       ] as ColumnDef<PartnerRow, unknown>[],
-    [],
+    [busy],
   );
 
   const addConsultancyBtn = (
@@ -1320,7 +1728,13 @@ function PartnersPanel() {
   );
 
   return (
-    <Page title="Partners" intro="Consultancies and referral codes students use at /r/CODE." compact wide embedded>
+    <Page
+      title="Partners"
+      intro="Consultancies and referral codes. Block pauses referrals and manager login; delete removes the partner."
+      compact
+      wide
+      embedded
+    >
       <FormSection title="Consultancies">
         <div className="mb-3 flex justify-end">{ready && rows.length > 0 ? addConsultancyBtn : null}</div>
         <DataTable
@@ -1334,7 +1748,7 @@ function PartnersPanel() {
           emptyIcon={Handshake}
           emptyAction={addConsultancyBtn}
           getRowId={(row) => row.id}
-          skeletonColumns={4}
+          skeletonColumns={6}
           skeletonRows={4}
         />
       </FormSection>
@@ -1440,6 +1854,71 @@ function PartnersPanel() {
           </FieldGrid>
         </form>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmCreate}
+        title={managerEmail.trim() ? "Create consultancy and invite manager?" : "Create this consultancy?"}
+        description={
+          managerEmail.trim()
+            ? `${name.trim()} (${code.trim()}) — invite goes to ${managerEmail.trim()}. Manager access cannot be revoked from this UI.`
+            : `${name.trim()} with code ${code.trim()}.`
+        }
+        confirmLabel={managerEmail.trim() ? "Create and invite" : "Create consultancy"}
+        tone={managerEmail.trim() ? "danger" : "default"}
+        busy={busy}
+        onClose={() => setConfirmCreate(false)}
+        onConfirm={() => doCreateConsultancy()}
+      />
+
+      <ConfirmDialog
+        open={confirmInvite}
+        title="Send manager invite?"
+        description={`${addEmail.trim()} will get a portal login for this organisation. This cannot be revoked from the admin UI.`}
+        confirmLabel="Send invite"
+        tone="danger"
+        busy={busy}
+        onClose={() => setConfirmInvite(false)}
+        onConfirm={() => doInviteManager()}
+      />
+
+      <ConfirmDialog
+        open={pendingPartner !== null}
+        title={
+          pendingPartner?.kind === "deactivate"
+            ? "Block this partner?"
+            : pendingPartner?.kind === "activate"
+              ? "Unblock this partner?"
+              : "Delete this partner?"
+        }
+        description={
+          pendingPartner
+            ? pendingPartner.kind === "delete"
+              ? `${pendingPartner.name} will be removed. Manager logins are soft-deleted and the referral code stops working.`
+              : pendingPartner.kind === "deactivate"
+                ? `${pendingPartner.name} referrals pause and manager portal access is blocked.`
+                : `${pendingPartner.name} can accept referrals again and managers can sign in.`
+            : undefined
+        }
+        confirmLabel={
+          pendingPartner?.kind === "deactivate"
+            ? "Block partner"
+            : pendingPartner?.kind === "activate"
+              ? "Unblock partner"
+              : "Delete partner"
+        }
+        tone={pendingPartner?.kind === "activate" ? "default" : "danger"}
+        busy={busy}
+        onClose={() => setPendingPartner(null)}
+        reasonField={{
+          label: "Reason (audited)",
+          required: true,
+          minLength: 10,
+          placeholder: "e.g. Partnership ended / suspected abuse",
+        }}
+        onConfirm={({ reason }) => {
+          if (reason) return doPartnerAction(reason);
+        }}
+      />
     </Page>
   );
 }
@@ -1461,6 +1940,11 @@ function ProofsPanel() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
   const [busyId, setBusyId] = useState<string>();
+  const [pendingDecide, setPendingDecide] = useState<{
+    id: string;
+    decision: "approved" | "rejected";
+    label: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -1478,14 +1962,20 @@ function ProofsPanel() {
     void load();
   }, [load]);
 
-  async function decide(id: string, decision: "approved" | "rejected") {
+  async function decide(id: string, decision: "approved" | "rejected", reviewNote?: string) {
     setBusyId(id);
     try {
-      await api.post(`/v1/admin/proofs/${id}/decide`, { decision });
+      await api.post(`/v1/admin/proofs/${id}/decide`, {
+        decision,
+        ...(reviewNote ? { reviewNote } : {}),
+      });
       toast.success(
         decision === "approved" ? "Proof approved" : "Proof rejected",
-        decision === "approved" ? "Student card marked completed." : "Student can upload again.",
+        decision === "approved"
+          ? "Student card marked completed."
+          : "Student can see your reason and upload again.",
       );
+      setPendingDecide(null);
       await load();
     } catch (err) {
       toast.error("Decision failed", err instanceof ApiError ? err.message : undefined);
@@ -1568,7 +2058,17 @@ function ProofsPanel() {
                     <FileDown className="h-4 w-4 shrink-0" aria-hidden />
                     Download
                   </Button>
-                  <Button type="button" disabled={busyId === p.id} onClick={() => void decide(p.id, "approved")}>
+                  <Button
+                    type="button"
+                    disabled={busyId === p.id}
+                    onClick={() =>
+                      setPendingDecide({
+                        id: p.id,
+                        decision: "approved",
+                        label: p.studentFullName ?? p.studentEmail ?? "this student",
+                      })
+                    }
+                  >
                     <Check className="h-4 w-4 shrink-0" aria-hidden />
                     Approve
                   </Button>
@@ -1576,7 +2076,13 @@ function ProofsPanel() {
                     type="button"
                     className="btn-secondary"
                     disabled={busyId === p.id}
-                    onClick={() => void decide(p.id, "rejected")}
+                    onClick={() =>
+                      setPendingDecide({
+                        id: p.id,
+                        decision: "rejected",
+                        label: p.studentFullName ?? p.studentEmail ?? "this student",
+                      })
+                    }
                   >
                     <X className="h-4 w-4 shrink-0" aria-hidden />
                     Reject
@@ -1587,6 +2093,41 @@ function ProofsPanel() {
           ))}
         </div>
       </AsyncContent>
+
+      <ConfirmDialog
+        open={pendingDecide?.decision === "approved"}
+        title="Approve this proof?"
+        description={
+          pendingDecide
+            ? `${pendingDecide.label}'s card will be marked completed.`
+            : undefined
+        }
+        confirmLabel="Approve"
+        busy={busyId === pendingDecide?.id}
+        onClose={() => setPendingDecide(null)}
+        onConfirm={() => {
+          if (pendingDecide) return decide(pendingDecide.id, "approved");
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDecide?.decision === "rejected"}
+        title="Reject this proof?"
+        description="The student will see your reason and can upload again."
+        confirmLabel="Reject"
+        tone="danger"
+        busy={busyId === pendingDecide?.id}
+        onClose={() => setPendingDecide(null)}
+        reasonField={{
+          label: "Reason shown to the student",
+          required: true,
+          minLength: 10,
+          placeholder: "e.g. Photo is blurry — please upload a clearer scan of the confirmation letter",
+        }}
+        onConfirm={({ reason }) => {
+          if (pendingDecide && reason) return decide(pendingDecide.id, "rejected", reason);
+        }}
+      />
     </Page>
   );
 }
@@ -1710,6 +2251,7 @@ function CardsPanel() {
     published: true,
   });
   const [busy, setBusy] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -1727,8 +2269,13 @@ function CardsPanel() {
     void load();
   }, [load]);
 
-  async function saveEdit(e: FormEvent) {
+  function saveEdit(e: FormEvent) {
     e.preventDefault();
+    if (!edit) return;
+    setConfirmSave(true);
+  }
+
+  async function doSaveEdit() {
     if (!edit) return;
     setBusy(true);
     try {
@@ -1740,6 +2287,7 @@ function CardsPanel() {
         published: edit.published,
       });
       toast.success("Card updated");
+      setConfirmSave(false);
       setEdit(null);
       await load();
     } catch (err) {
@@ -1877,6 +2425,22 @@ function CardsPanel() {
           </Button>
         </form>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmSave && edit !== null}
+        title="Save card changes?"
+        description={
+          edit
+            ? `${edit.title} will ${edit.published ? "stay on" : "be removed from"} the student checklist${
+                edit.comingSoon ? " as coming soon" : ""
+              }.`
+            : undefined
+        }
+        confirmLabel="Save card"
+        busy={busy}
+        onClose={() => setConfirmSave(false)}
+        onConfirm={() => doSaveEdit()}
+      />
     </Page>
   );
 }
@@ -1898,6 +2462,7 @@ function LegalPanel() {
   const [version, setVersion] = useState("");
   const [publishedAt, setPublishedAt] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
 
   const load = useCallback(
     async (s: string) => {
@@ -1924,8 +2489,12 @@ function LegalPanel() {
     void load(slug);
   }, [slug, load]);
 
-  async function publish(e: FormEvent) {
+  function publish(e: FormEvent) {
     e.preventDefault();
+    setConfirmPublish(true);
+  }
+
+  async function doPublish() {
     setBusy(true);
     try {
       const doc = await api.put<{ publishedAt?: string }>("/v1/admin/legal/publish", {
@@ -1936,6 +2505,7 @@ function LegalPanel() {
       });
       setPublishedAt(doc.publishedAt);
       toast.success("Published", `${slug} · ${version}`);
+      setConfirmPublish(false);
     } catch (err) {
       toast.error("Publish failed", err instanceof ApiError ? err.message : undefined);
     } finally {
@@ -1980,6 +2550,17 @@ function LegalPanel() {
           Publish version
         </Button>
       </form>
+
+      <ConfirmDialog
+        open={confirmPublish}
+        title="Publish this legal version?"
+        description={`${slug} · ${version} goes live. Students may need to re-accept Terms if the version changes.`}
+        confirmLabel="Publish"
+        tone="danger"
+        busy={busy}
+        onClose={() => setConfirmPublish(false)}
+        onConfirm={() => doPublish()}
+      />
     </Page>
   );
 }

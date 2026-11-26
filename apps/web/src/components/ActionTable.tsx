@@ -114,7 +114,7 @@ export function ActionTable<T>({
                 ))}
                 {actions ? (
                   <td className="table-td text-right">
-                    <div className="inline-flex flex-wrap items-center justify-end gap-1.5">{actions(row)}</div>
+                    <div className="table-actions">{actions(row)}</div>
                   </td>
                 ) : null}
               </tr>

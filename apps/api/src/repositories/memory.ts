@@ -275,7 +275,13 @@ export class InMemoryRepositories implements Repositories {
   private settingMap = new Map<string, unknown>();
   private clickList: { linkKey: string }[] = [];
   private deletionRequests = new Map<string, string>();
-  private consultancyList: { id: string; name: string; referralCode: string }[] = [];
+  private consultancyList: {
+    id: string;
+    name: string;
+    referralCode: string;
+    active: boolean;
+    deletedAt: Date | null;
+  }[] = [];
   private memberships = new Map<string, { consultancyId: string; role: string }>();
   readonly cardDefs: CardDefinition[];
   legalDocs: LegalDocumentRecord[];
@@ -300,7 +306,7 @@ export class InMemoryRepositories implements Repositories {
     opts: { id?: string; memberRole?: string } = {},
   ): string {
     const id = opts.id ?? randomUUID();
-    this.consultancyList.push({ id, name, referralCode });
+    this.consultancyList.push({ id, name, referralCode, active: true, deletedAt: null });
     if (memberUserId) {
       this.memberships.set(memberUserId, {
         consultancyId: id,
@@ -524,21 +530,46 @@ export class InMemoryRepositories implements Repositories {
 
   consultancies: Repositories["consultancies"] = {
     create: async (input) => {
-      this.consultancyList.push({ ...input });
+      this.consultancyList.push({
+        id: input.id,
+        name: input.name,
+        referralCode: input.referralCode,
+        active: input.active ?? true,
+        deletedAt: null,
+      });
     },
-    list: async () => this.consultancyList.map((c) => ({ ...c })),
+    list: async () =>
+      this.consultancyList.filter((c) => !c.deletedAt).map((c) => ({ ...c })),
     findById: async (id) => {
-      const c = this.consultancyList.find((x) => x.id === id);
+      const c = this.consultancyList.find((x) => x.id === id && !x.deletedAt);
       return c ? { ...c } : null;
     },
     findByReferralCode: async (code) => {
-      const c = this.consultancyList.find((x) => x.referralCode.toUpperCase() === code.toUpperCase());
-      return c ? { id: c.id, name: c.name, referralCode: c.referralCode } : null;
+      const c = this.consultancyList.find(
+        (x) => !x.deletedAt && x.referralCode.toUpperCase() === code.toUpperCase(),
+      );
+      return c ? { ...c } : null;
+    },
+    setActive: async (id, active) => {
+      const idx = this.consultancyList.findIndex((x) => x.id === id && !x.deletedAt);
+      if (idx < 0) return null;
+      this.consultancyList[idx] = { ...this.consultancyList[idx]!, active };
+      return { ...this.consultancyList[idx]! };
+    },
+    softDelete: async (id, at) => {
+      const idx = this.consultancyList.findIndex((x) => x.id === id && !x.deletedAt);
+      if (idx < 0) return null;
+      this.consultancyList[idx] = { ...this.consultancyList[idx]!, active: false, deletedAt: at };
+      return { ...this.consultancyList[idx]! };
     },
     getMembership: async (userId) => this.memberships.get(userId) ?? null,
     addMember: async (userId, consultancyId, role = "owner") => {
       this.memberships.set(userId, { consultancyId, role });
     },
+    listMembers: async (consultancyId) =>
+      [...this.memberships.entries()]
+        .filter(([, m]) => m.consultancyId === consultancyId)
+        .map(([userId, m]) => ({ userId, role: m.role })),
     hasMembers: async (consultancyId) =>
       [...this.memberships.values()].some((m) => m.consultancyId === consultancyId),
     listSharedStudents: async (consultancyId) =>

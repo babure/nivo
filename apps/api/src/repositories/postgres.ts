@@ -11,6 +11,7 @@ import {
   type AuthTokenRecord,
   type CardDefinition,
   type ConsentRecord,
+  type ConsultancyRecord,
   type IdentityFileRecord,
   type IdentityRecordRow,
   type InvoiceRecord,
@@ -57,10 +58,22 @@ function mapUser(row: typeof s.users.$inferSelect): UserRecord {
     googleSub: row.googleSub ?? null,
     avatarUrl: row.avatarUrl ?? null,
     passwordSet: row.passwordSet,
+    isBootstrap: row.isBootstrap,
     failedLoginCount: row.failedLoginCount,
     lockedUntil: row.lockedUntil,
+    blockedAt: row.blockedAt ?? null,
     createdAt: row.createdAt,
     deletedAt: row.deletedAt,
+  };
+}
+
+function mapConsultancy(row: typeof s.consultancies.$inferSelect): ConsultancyRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    referralCode: row.referralCode,
+    active: row.active,
+    deletedAt: row.deletedAt ?? null,
   };
 }
 
@@ -136,8 +149,10 @@ export class PostgresRepositories implements Repositories {
             googleSub: user.googleSub,
             avatarUrl: user.avatarUrl,
             passwordSet: user.passwordSet,
+            isBootstrap: user.isBootstrap,
             failedLoginCount: user.failedLoginCount,
             lockedUntil: user.lockedUntil,
+            blockedAt: user.blockedAt,
             createdAt: user.createdAt,
             deletedAt: user.deletedAt,
           })
@@ -901,23 +916,53 @@ export class PostgresRepositories implements Repositories {
         id: input.id,
         name: input.name,
         referralCode: input.referralCode,
+        active: input.active ?? true,
       });
     },
     list: async () => {
-      const rows = await this.db.select().from(s.consultancies).orderBy(asc(s.consultancies.name));
-      return rows.map((r) => ({ id: r.id, name: r.name, referralCode: r.referralCode }));
+      const rows = await this.db
+        .select()
+        .from(s.consultancies)
+        .where(isNull(s.consultancies.deletedAt))
+        .orderBy(asc(s.consultancies.name));
+      return rows.map(mapConsultancy);
     },
     findById: async (id) => {
-      const [row] = await this.db.select().from(s.consultancies).where(eq(s.consultancies.id, id)).limit(1);
-      return row ? { id: row.id, name: row.name, referralCode: row.referralCode } : null;
+      const [row] = await this.db
+        .select()
+        .from(s.consultancies)
+        .where(and(eq(s.consultancies.id, id), isNull(s.consultancies.deletedAt)))
+        .limit(1);
+      return row ? mapConsultancy(row) : null;
     },
     findByReferralCode: async (code) => {
       const [row] = await this.db
         .select()
         .from(s.consultancies)
-        .where(sql`upper(${s.consultancies.referralCode}) = ${code.toUpperCase()}`)
+        .where(
+          and(
+            sql`upper(${s.consultancies.referralCode}) = ${code.toUpperCase()}`,
+            isNull(s.consultancies.deletedAt),
+          ),
+        )
         .limit(1);
-      return row ? { id: row.id, name: row.name, referralCode: row.referralCode } : null;
+      return row ? mapConsultancy(row) : null;
+    },
+    setActive: async (id, active) => {
+      const [row] = await this.db
+        .update(s.consultancies)
+        .set({ active })
+        .where(and(eq(s.consultancies.id, id), isNull(s.consultancies.deletedAt)))
+        .returning();
+      return row ? mapConsultancy(row) : null;
+    },
+    softDelete: async (id, at) => {
+      const [row] = await this.db
+        .update(s.consultancies)
+        .set({ active: false, deletedAt: at })
+        .where(and(eq(s.consultancies.id, id), isNull(s.consultancies.deletedAt)))
+        .returning();
+      return row ? mapConsultancy(row) : null;
     },
     getMembership: async (userId) => {
       const [row] = await this.db
@@ -932,6 +977,13 @@ export class PostgresRepositories implements Repositories {
         .insert(s.consultancyUsers)
         .values({ userId, consultancyId, role })
         .onConflictDoNothing();
+    },
+    listMembers: async (consultancyId) => {
+      const rows = await this.db
+        .select({ userId: s.consultancyUsers.userId, role: s.consultancyUsers.role })
+        .from(s.consultancyUsers)
+        .where(eq(s.consultancyUsers.consultancyId, consultancyId));
+      return rows.map((r) => ({ userId: r.userId, role: r.role }));
     },
     hasMembers: async (consultancyId) => {
       const [row] = await this.db

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { CardStatus } from "@nivo/shared";
 import { ArrowRight, Check, CreditCard, ListChecks, Upload } from "lucide-react";
 import { AsyncContent } from "../components/AsyncContent";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DashboardCard } from "../components/DashboardCard";
 import { NextStep } from "../components/Page";
 import { api, ApiError, uploadFile } from "../lib/api";
@@ -22,6 +23,7 @@ type StudentProof = {
   id: string;
   cardKey: string;
   status: "pending" | "approved" | "rejected";
+  reviewNote?: string | null;
   createdAt: string;
 };
 
@@ -153,6 +155,7 @@ export default function Dashboard() {
   const [banner, setBanner] = useState<string>();
   const [proofBusy, setProofBusy] = useState<string>();
   const [proofByCard, setProofByCard] = useState<Record<string, StudentProof>>({});
+  const [pendingProofUpload, setPendingProofUpload] = useState<{ cardKey: string; file: File } | null>(null);
 
   async function reloadCards() {
     const [res, proofsRes] = await Promise.all([
@@ -163,12 +166,21 @@ export default function Dashboard() {
     setProofByCard(latestProofByCard(proofsRes.proofs));
   }
 
-  async function uploadProof(cardKey: string, file: File | null) {
+  function requestProofUpload(cardKey: string, file: File | null) {
     if (!file) return;
+    if (proofByCard[cardKey]?.status === "pending") {
+      setPendingProofUpload({ cardKey, file });
+      return;
+    }
+    void uploadProof(cardKey, file);
+  }
+
+  async function uploadProof(cardKey: string, file: File) {
     setProofBusy(cardKey);
     try {
       await uploadFile(`/v1/cards/${cardKey}/proof`, file);
       toast.success("Proof uploaded", "An admin will review it under Proofs.");
+      setPendingProofUpload(null);
       await reloadCards();
     } catch (err) {
       toast.error("Could not upload proof", err instanceof ApiError ? err.message : undefined);
@@ -355,9 +367,14 @@ export default function Dashboard() {
                         </p>
                       ) : null}
                       {proofByCard[c.key]?.status === "rejected" ? (
-                        <p className="text-xs font-medium text-red-700">
-                          Proof was rejected. Upload a clearer file to try again.
-                        </p>
+                        <div className="space-y-1 text-xs">
+                          <p className="font-medium text-red-700">Proof was rejected. Upload a clearer file to try again.</p>
+                          {proofByCard[c.key]?.reviewNote ? (
+                            <p className="rounded-lg bg-red-50 px-2 py-1.5 text-red-900/90">
+                              Admin note: {proofByCard[c.key]!.reviewNote}
+                            </p>
+                          ) : null}
+                        </div>
                       ) : null}
                       <label className="flex cursor-pointer flex-col gap-1.5">
                         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-charcoal">
@@ -374,7 +391,7 @@ export default function Dashboard() {
                           accept="image/jpeg,image/png,application/pdf"
                           disabled={proofBusy === c.key}
                           onChange={(e) => {
-                            void uploadProof(c.key, e.target.files?.[0] ?? null);
+                            requestProofUpload(c.key, e.target.files?.[0] ?? null);
                             e.target.value = "";
                           }}
                         />
@@ -428,6 +445,18 @@ export default function Dashboard() {
         {copy["commission.disclosure"] ??
           "Blocked account is with Expatrio; health insurance with Fintiba. NIVO may receive a commission — this does not cost you extra. Your contract is with the partner."}
       </p>
+
+      <ConfirmDialog
+        open={pendingProofUpload !== null}
+        title="Replace pending proof?"
+        description="Your previous upload is still waiting for review. Replacing it sends a new file for admin review."
+        confirmLabel="Replace proof"
+        busy={Boolean(pendingProofUpload && proofBusy === pendingProofUpload.cardKey)}
+        onClose={() => setPendingProofUpload(null)}
+        onConfirm={() => {
+          if (pendingProofUpload) return uploadProof(pendingProofUpload.cardKey, pendingProofUpload.file);
+        }}
+      />
     </div>
   );
 }
