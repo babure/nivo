@@ -107,7 +107,7 @@ export function Header() {
                 </button>
               ))}
             {isAdmin && (
-              <NavLink to="/admin/students" className={link} onClick={() => setOpen(false)}>
+              <NavLink to="/admin/dashboard" className={link} onClick={() => setOpen(false)}>
                 Admin
               </NavLink>
             )}

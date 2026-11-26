@@ -44,7 +44,7 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
         return;
       }
       if (kind === "student" && user.role === "admin") {
-        navigate("/admin/students", { replace: true });
+        navigate("/admin/dashboard", { replace: true });
         return;
       }
       if (kind === "student" && user.role === "consultancy") {

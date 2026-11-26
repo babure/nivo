@@ -1994,7 +1994,9 @@ function AdminLoginPage() {
 
 export default function AdminRoutes() {
   const { user } = useAuth();
-  const first = ADMIN_SECTIONS.find((s) => hasPermission(user?.permissions ?? [], s.permission));
+  const first =
+    ADMIN_SECTIONS.find((s) => s.path === "dashboard" && hasPermission(user?.permissions ?? [], s.permission)) ??
+    ADMIN_SECTIONS.find((s) => hasPermission(user?.permissions ?? [], s.permission));
   return (
     <Routes>
       <Route path="login" element={<AdminLoginPage />} />

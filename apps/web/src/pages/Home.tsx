@@ -304,53 +304,51 @@ export default function Home() {
             </p>
           </div>
 
-          <div
-            role="tablist"
-            aria-label="Checklist lines"
-            className="mt-8 divide-y divide-charcoal/10 border-y border-charcoal/10 sm:mt-10"
-          >
-            {LINES.map((item) => {
-              const selected = lineId === item.id;
-              return (
-                <button
-                  key={item.id}
-                  id={`line-${item.id}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  aria-controls="path-detail"
-                  className={`flex min-h-tap w-full flex-col items-start gap-0.5 px-3 py-4 text-left transition-colors duration-200 ease-out sm:flex-row sm:items-baseline sm:justify-between sm:gap-8 ${
-                    selected ? "bg-orange/10" : "hover:bg-paper"
-                  }`}
-                  onClick={() => setLineId(item.id)}
-                >
-                  <span className="font-display text-base font-semibold text-charcoal">
-                    <span className="mr-3 tabular-nums text-orange">{item.line}</span>
-                    {item.title}
-                  </span>
-                  <span className="text-sm text-charcoal-soft sm:text-right">{item.board}</span>
-                </button>
-              );
-            })}
-          </div>
+          <div className="mt-8 grid items-stretch gap-6 sm:mt-10 lg:grid-cols-[minmax(16rem,0.82fr)_minmax(0,1.18fr)] lg:gap-8">
+            <div role="tablist" aria-label="Checklist lines" className="grid content-start gap-2">
+              {LINES.map((item) => {
+                const selected = lineId === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    id={`line-${item.id}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls="path-detail"
+                    className={`min-h-tap rounded-xl border px-4 py-3 text-left transition-colors duration-200 ease-out ${
+                      selected
+                        ? "border-orange bg-orange/10"
+                        : "border-charcoal/10 bg-paper hover:border-charcoal/20"
+                    }`}
+                    onClick={() => setLineId(item.id)}
+                  >
+                    <span className="font-display text-sm font-semibold tabular-nums text-orange-dark">{item.line}</span>
+                    <span className="mt-1 block font-display text-base font-semibold text-charcoal">{item.title}</span>
+                    <span className="mt-1 block text-sm leading-snug text-charcoal-soft">{item.board}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          <figure className="mt-8 overflow-hidden">
-            <img
-              src={frame.src}
-              alt={frame.alt}
-              className={`aspect-video w-full object-cover ${frame.focus}`}
-              width={1600}
-              height={900}
-              decoding="async"
-            />
-          </figure>
+            <figure className="relative overflow-hidden max-lg:aspect-video lg:h-full">
+              <img
+                src={frame.src}
+                alt={frame.alt}
+                className={`absolute inset-0 h-full w-full object-cover ${frame.focus}`}
+                width={1600}
+                height={900}
+                decoding="async"
+              />
+            </figure>
+          </div>
 
           <div
             id="path-detail"
             role="tabpanel"
             aria-live="polite"
             aria-labelledby={lineId === ARRIVE.id ? undefined : `line-${lineId}`}
-            className="mt-6 grid gap-6 border-t border-charcoal/10 pt-6"
+            className="mt-6 grid gap-4 border-t border-charcoal/10 pt-6 sm:grid-cols-3"
           >
             <Detail label="What you do" body={frame.you} />
             <Detail label="Who you deal with" body={frame.partner} />

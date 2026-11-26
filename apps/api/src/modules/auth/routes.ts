@@ -330,7 +330,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const dest =
         stored.next ??
         (user.role === "super_admin"
-          ? "/admin/students"
+          ? "/admin/dashboard"
           : user.role === "consultancy"
             ? "/consultancy/dashboard"
             : profileRow?.paymentStatus !== "paid"
