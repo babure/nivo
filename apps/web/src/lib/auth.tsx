@@ -29,7 +29,7 @@ export type SessionUser = {
 type AuthContextValue = {
   user: SessionUser | null;
   ready: boolean;
-  signIn: (credentials: { email: string; password: string; totp?: string }) => Promise<SessionUser>;
+  signIn: (credentials: { email: string; password: string }) => Promise<SessionUser>;
   signOut: () => Promise<void>;
   refresh: () => Promise<SessionUser | null>;
 };
@@ -130,7 +130,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.post("/v1/auth/login", {
       email: credentials.email,
       password: credentials.password,
-      ...(credentials.totp ? { totp: credentials.totp } : {}),
     });
     const me = await refresh();
     if (!me) throw new ApiError(401, "UNAUTHORIZED", "Could not load your session.");

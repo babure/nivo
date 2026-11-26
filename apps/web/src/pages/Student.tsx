@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Save,
   Send,
-  Shield,
   Trash2,
   Undo2,
   Upload,
@@ -1136,9 +1135,6 @@ export function Profile() {
   const { user, refresh, signOut } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const [secret, setSecret] = useState<string>();
-  const [otpauthUrl, setOtpauthUrl] = useState<string>();
-  const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [confirmEmail, setConfirmEmail] = useState("");
@@ -1165,30 +1161,6 @@ export function Profile() {
       })
       .catch(() => undefined);
   }, []);
-
-  async function begin2fa() {
-    try {
-      const res = await api.post<{ secret: string; otpauthUrl: string }>("/v1/auth/2fa/setup");
-      setSecret(res.secret);
-      setOtpauthUrl(res.otpauthUrl);
-    } catch (e) {
-      toast.error("Could not start 2FA setup", e instanceof ApiError ? e.message : undefined);
-    }
-  }
-
-  async function enable2fa(e: FormEvent) {
-    e.preventDefault();
-    if (!secret) return;
-    try {
-      await api.post("/v1/auth/2fa/enable", { secret, code });
-      toast.success("Two-factor authentication enabled");
-      setSecret(undefined);
-      setCode("");
-      await refresh();
-    } catch (e) {
-      toast.error("Invalid code", e instanceof ApiError ? e.message : undefined);
-    }
-  }
 
   async function changePassword(e: FormEvent) {
     e.preventDefault();
@@ -1337,26 +1309,6 @@ export function Profile() {
               Save referral settings
             </Button>
           </form>
-        </FormSection>
-
-        <FormSection title="Two-factor authentication" description="Required for admin and consultancy accounts.">
-          {!secret ? (
-            <Button onClick={() => void begin2fa()}>
-              <Shield className="h-4 w-4 shrink-0" aria-hidden />
-              Set up authenticator
-            </Button>
-          ) : (
-            <form onSubmit={enable2fa} className="space-y-3">
-              <p className="break-all text-xs text-charcoal-soft">{otpauthUrl}</p>
-              <Field label="Code from authenticator">
-                <input className="input" value={code} onChange={(e) => setCode(e.target.value)} required pattern="\d{6}" />
-              </Field>
-              <Button type="submit">
-                <Shield className="h-4 w-4 shrink-0" aria-hidden />
-                Enable 2FA
-              </Button>
-            </form>
-          )}
         </FormSection>
 
         <FormSection title="Signature">

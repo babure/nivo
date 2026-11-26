@@ -16,7 +16,6 @@ export type UserRecord = {
   googleSub: string | null;
   avatarUrl: string | null;
   passwordSet: boolean;
-  totpSecret: EncryptedBlob | null;
   failedLoginCount: number;
   lockedUntil: Date | null;
   createdAt: Date;
@@ -174,6 +173,8 @@ export interface UserRepo {
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
   findByGoogleSub(googleSub: string): Promise<UserRecord | null>;
+  /** Drop google_sub on soft-deleted accounts so the same Google user can register again. */
+  releaseDeletedGoogleSub(googleSub: string): Promise<void>;
   update(id: string, patch: Partial<Omit<UserRecord, "id">>): Promise<UserRecord | null>;
   list(): Promise<UserRecord[]>;
 }

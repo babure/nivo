@@ -70,7 +70,8 @@ async function processDeletions(db: Db, logger: FastifyBaseLogger): Promise<void
         phone: "",
         email: `deleted+${req.userId}@erased.nivo`,
         passwordHash: "!",
-        totpSecret: null,
+        googleSub: null,
+        avatarUrl: null,
       })
       .where(eq(s.users.id, req.userId));
     await db.delete(s.sessions).where(eq(s.sessions.userId, req.userId));

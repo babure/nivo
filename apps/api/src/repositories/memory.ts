@@ -19,6 +19,20 @@ import {
   type UserRecord,
 } from "./types.js";
 
+/** Newest published document per slug. Undated rows lose to any dated publication. */
+function currentLegalDocuments(docs: LegalDocumentRecord[], slug?: string): LegalDocumentRecord[] {
+  const best = new Map<string, LegalDocumentRecord>();
+  for (const doc of docs) {
+    if (!doc.published) continue;
+    if (slug && doc.slug !== slug) continue;
+    const prev = best.get(doc.slug);
+    const at = doc.publishedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const prevAt = prev ? (prev.publishedAt?.getTime() ?? Number.NEGATIVE_INFINITY) : Number.NEGATIVE_INFINITY;
+    if (!prev || at >= prevAt) best.set(doc.slug, { ...doc });
+  }
+  return [...best.values()];
+}
+
 export const DEFAULT_CARDS: CardDefinition[] = [
   {
     key: "blocked_account",
@@ -324,6 +338,13 @@ export class InMemoryRepositories implements Repositories {
       }
       return null;
     },
+    releaseDeletedGoogleSub: async (googleSub) => {
+      for (const u of this.usersById.values()) {
+        if (u.googleSub === googleSub && u.deletedAt) {
+          this.usersById.set(u.id, { ...u, googleSub: null });
+        }
+      }
+    },
     update: async (id, patch) => {
       const u = this.usersById.get(id);
       if (!u) return null;
@@ -479,13 +500,8 @@ export class InMemoryRepositories implements Repositories {
   };
 
   legal: Repositories["legal"] = {
-    list: async () => this.legalDocs.filter((d) => d.published).map((d) => ({ ...d })),
-    getPublished: async (slug) => {
-      const docs = this.legalDocs
-        .filter((d) => d.slug === slug && d.published)
-        .sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0));
-      return docs[0] ? { ...docs[0] } : null;
-    },
+    list: async () => currentLegalDocuments(this.legalDocs),
+    getPublished: async (slug) => currentLegalDocuments(this.legalDocs, slug)[0] ?? null,
     publish: async (doc) => {
       this.legalDocs.push({ ...doc });
       return { ...doc };

@@ -17,6 +17,9 @@
   --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Sora", "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Monaco, Consolas, monospace;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @layer base {
@@ -202,5 +205,68 @@
 
   .skeleton {
     @apply animate-pulse rounded-md bg-charcoal/[0.08];
+  }
+
+  .journey-path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: journey-draw 900ms var(--ease-in-out) forwards;
+  }
+
+  .journey-stop {
+    transition: opacity 200ms var(--ease-out);
+  }
+
+  .nivo-walker .walker-rise {
+    transition: transform 160ms var(--ease-out);
+  }
+
+  .nivo-walker .leg,
+  .nivo-walker .arm {
+    transform-box: fill-box;
+    transform-origin: 0 0;
+    animation: nivo-stride 0.72s linear infinite paused;
+  }
+
+  .nivo-walker .leg-r,
+  .nivo-walker .arm-back {
+    animation-direction: reverse;
+  }
+
+  .nivo-walker[data-walking="true"] .leg,
+  .nivo-walker[data-walking="true"] .arm {
+    animation-play-state: running;
+  }
+}
+
+@keyframes journey-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes nivo-stride {
+  0%, 100% { transform: rotate(8deg); }
+  50% { transform: rotate(-8deg); }
+}
+
+@keyframes nivo-cheer {
+  0% { transform: rotate(0deg); }
+  40% { transform: rotate(-12deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nivo-walker:hover .walker-rise {
+    transform: translateY(-3px);
+    transition-duration: 220ms;
+    transition-timing-function: var(--ease-out-back);
+  }
+
+  .nivo-walker:hover .leg,
+  .nivo-walker:hover .arm-back {
+    animation-play-state: paused;
+  }
+
+  .nivo-walker:hover .arm-front {
+    animation: nivo-cheer 420ms var(--ease-out) 1;
   }
 }

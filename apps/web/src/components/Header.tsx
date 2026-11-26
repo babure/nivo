@@ -7,6 +7,7 @@ import { homePathFor, logoutPathFor } from "../lib/navigation";
 const PUBLIC_NAV = [
   { hash: "#path", label: "The path" },
   { hash: "#how-it-works", label: "How it works" },
+  { hash: "#fee", label: "The fee" },
   { hash: "#faq", label: "FAQ" },
   { hash: "#about", label: "Contact" },
 ];
@@ -49,8 +50,14 @@ export function Header() {
     void navigate({ pathname: "/", hash });
   }
 
+  const onLanding = location.pathname === "/";
+
   return (
-    <header className="relative z-20 border-b border-charcoal/8 bg-paper/80 pt-[env(safe-area-inset-top)] backdrop-blur">
+    <header
+      className={`z-30 border-b border-charcoal/8 bg-paper/95 pt-[env(safe-area-inset-top)] backdrop-blur ${
+        onLanding ? "sticky top-0" : "relative"
+      }`}
+    >
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
         <Link
           to="/"

@@ -24,6 +24,17 @@ export class ApiError extends Error {
   }
 }
 
+/** Current legal version from a TERMS_REACCEPT_REQUIRED payload, when the API sent one. */
+export function legalVersionFromError(err: unknown, slug: string): string | undefined {
+  if (!(err instanceof ApiError) || !Array.isArray(err.details)) return undefined;
+  for (const item of err.details) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { slug?: unknown; version?: unknown };
+    if (row.slug === slug && typeof row.version === "string" && row.version) return row.version;
+  }
+  return undefined;
+}
+
 /** Prefer field-level validation messages when the API returns Zod-style details. */
 export function formatApiError(err: unknown, fallback: string): string {
   if (!(err instanceof ApiError)) return fallback;

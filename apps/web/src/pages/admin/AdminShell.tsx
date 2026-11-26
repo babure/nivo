@@ -949,7 +949,7 @@ function SettingsPanel() {
   );
 }
 
-type AdminRow = { id: string; email: string; fullName: string; totpEnabled: boolean };
+type AdminRow = { id: string; email: string; fullName: string };
 
 function TeamPanel() {
   const toast = useToast();
@@ -1022,15 +1022,6 @@ function TeamPanel() {
         header: "Email",
         cell: (a) => <span className="table-meta">{a.email}</span>,
       },
-      {
-        key: "2fa",
-        header: "2FA",
-        cell: (a) => (
-          <StatusPill tone={a.totpEnabled ? "ok" : "muted"}>
-            {a.totpEnabled ? "On" : "Off"}
-          </StatusPill>
-        ),
-      },
     ],
     [],
   );
@@ -1056,11 +1047,6 @@ function TeamPanel() {
           emptyDescription="Create an admin login. The first super-admin may already be bootstrapped on API startup."
           emptyIcon={UserCog}
           emptyAction={addAdminBtn}
-          actions={(a) => (
-            <span className="text-xs text-charcoal-soft">
-              {a.totpEnabled ? "Protected" : "Set 2FA in profile"}
-            </span>
-          )}
         />
       </FormSection>
 

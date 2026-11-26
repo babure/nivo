@@ -5,7 +5,7 @@ import { Field, Page } from "../components/Page";
 import { KeyRound, LogIn, Mail } from "lucide-react";
 import { Button } from "../components/Button";
 import { GoogleSignInButton } from "../components/GoogleSignIn";
-import { api, ApiError, formatApiError } from "../lib/api";
+import { api, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { resolvePostLoginPath } from "../lib/navigation";
 import { useToast } from "../lib/toast";
@@ -18,8 +18,6 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
   const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [totp, setTotp] = useState("");
-  const [needsTotp, setNeedsTotp] = useState(false);
   const [busy, setBusy] = useState(false);
   const fromPath = (location.state as { from?: string } | null)?.from ?? "";
   const consultancyIntent = kind === "student" && fromPath.startsWith("/consultancy");
@@ -36,17 +34,9 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
       toast.error("Enter a valid email and password");
       return;
     }
-    if (needsTotp && !/^\d{6}$/.test(totp)) {
-      toast.error("Enter your 6-digit authenticator code");
-      return;
-    }
     setBusy(true);
     try {
-      const user = await signIn({
-        email,
-        password,
-        ...(needsTotp || totp ? { totp } : {}),
-      });
+      const user = await signIn({ email, password });
       const from = (location.state as { from?: string } | null)?.from;
       if (kind === "admin" && user.role !== "admin") {
         await signOut();
@@ -63,12 +53,7 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
       }
       navigate(resolvePostLoginPath(user, from), { replace: true });
     } catch (err) {
-      if (err instanceof ApiError && err.code === "AUTH_2FA_REQUIRED") {
-        setNeedsTotp(true);
-        toast.info("Two-factor required", "Enter your authenticator code.");
-      } else {
-        toast.error("Could not sign in", formatApiError(err, "Check your email and password."));
-      }
+      toast.error("Could not sign in", formatApiError(err, "Check your email and password."));
     } finally {
       setBusy(false);
     }
@@ -96,18 +81,6 @@ export function Login({ kind = "student" }: { kind?: "student" | "admin" }) {
         <Field label="Password">
           <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
-        {(needsTotp || kind === "admin") && (
-          <Field label="Authenticator code">
-            <input
-              className="input"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="6-digit code"
-              value={totp}
-              onChange={(e) => setTotp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            />
-          </Field>
-        )}
         <Button type="submit" className="w-full" disabled={busy}>
           <LogIn className="h-4 w-4 shrink-0" aria-hidden />
           {busy ? "Signing in…" : "Log in"}

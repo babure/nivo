@@ -352,12 +352,20 @@ export class PaymentsService {
     const { repos } = this.deps;
     const terms = await repos.legal.getPublished("terms");
     if (terms && terms.version !== input.termsVersion) {
-      throw new AppError("TERMS_REACCEPT_REQUIRED", `Current terms version is ${terms.version}.`);
+      throw new AppError(
+        "TERMS_REACCEPT_REQUIRED",
+        "The terms were updated. Please accept the current version to continue.",
+        [{ slug: "terms", version: terms.version }],
+      );
     }
     // Withdrawal / refund policy is stored as slug "refund" in Phase 1 legal seed.
     const withdrawal = await repos.legal.getPublished("refund");
     if (withdrawal && withdrawal.version !== input.withdrawalVersion) {
-      throw new AppError("TERMS_REACCEPT_REQUIRED", `Current withdrawal version is ${withdrawal.version}.`);
+      throw new AppError(
+        "TERMS_REACCEPT_REQUIRED",
+        "The withdrawal policy was updated. Please accept the current version to continue.",
+        [{ slug: "refund", version: withdrawal.version }],
+      );
     }
     const now = this.now();
     const { hashIp } = await import("../../lib/tokens.js");

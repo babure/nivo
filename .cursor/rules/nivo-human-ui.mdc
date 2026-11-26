@@ -1,0 +1,50 @@
+---
+description: Keep NIVO UI feeling human-crafted, not generic AI SaaS. Apply when changing web UI, marketing pages, shells, or motion.
+globs: apps/web/**/*.{tsx,css,js}
+alwaysApply: false
+---
+
+# NIVO human-crafted UI
+
+NIVO is for international students arriving in Germany. Interfaces should feel calm, specific, and hand-built — not like a default AI landing or dashboard kit.
+
+## Brand & layout
+
+- Keep NIVO orange (`#FB770B`), charcoal, paper/mist. Do not drift into purple gradients, glow stacks, or cream+terracotta “AI portfolio” looks.
+- Brand-first on marketing: if removing the nav would still leave a clear NIVO identity, branding is strong enough.
+- One job per section. Prefer hairline rules and uneven grids over identical card grids with soft shadows.
+- Cards only when they wrap a real interaction. If border/shadow/radius can go without hurting understanding, remove them.
+- Hero budget: brand, one headline, one support line, one CTA group, one dominant atmosphere — no stats strips, pill clusters, or floating badges on media.
+
+## Copy (anti-AI voice)
+
+- Speak to a student preparing for Germany: Sperrkonto, visa docs, housing, SIM — concrete, not “unlock your potential.”
+- Prefer plain verbs: Start, Continue, Upload, Open. Avoid “Get started on your journey to excellence.”
+- Do not accent a single random word in a headline with italic/color.
+- Avoid ALL-CAPS eyebrows on every block. If a label is needed, use a short sentence-case line in orange-dark or soft charcoal.
+- Partner/commission language stays honest and short (NIVO introduces; student contracts with the partner).
+
+## Motion
+
+- Animate for feedback, orientation, or one deliberate entrance — not decoration.
+- **Landing:** at most one orchestrated load moment (e.g. hero). Do not `rise-in` / fade-up every section or list item (classic AI tell).
+- **App chrome:** prefer CSS transitions on hover/active/open/close. High-frequency UI enters fast (≈0–100ms), exits briefly (100–150ms).
+- Use `transform` + `opacity` only for movement. Never `transition: all`. Respect `prefers-reduced-motion` (already in `index.css`).
+- Confirm in place when possible (button label → “Saved”) before relying on corner toasts.
+- Press feedback: `:active { transform: scale(0.98) }` at 0ms on tappable controls.
+
+## LandingFolio / external inspiration
+
+- Free LandingFolio ≈ **20 calls/day** — check agent-store `landingfolio-usage.md` before calling; prefer ≤2 calls per design pass.
+- LandingFolio returns **static screenshots**, not live animation or code. Tag `animation` only finds pages that look motion-heavy in a still.
+- Always **adapt** into NIVO tokens; never 1:1 clone a SaaS screenshot’s colors/type unless the user asks.
+- Live motion and previews: implement in-app (CSS / existing patterns); use browser preview or Playwright — not LandingFolio.
+
+## Quick “AI tell” checklist (reject if present)
+
+- Staggered fade/slide-up on every block
+- Tracked ALL-CAPS labels above every heading
+- Three identical rounded cards with the same shadow
+- Purple/indigo gradient theme or glassmorphism stack
+- Generic stock metaphor with no Germany/student specificity
+- Mid-dot meta rows (`A · B · C`) as decoration

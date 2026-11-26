@@ -4,7 +4,7 @@ import { SERVICE_CURRENCY, SERVICE_FEE_CENTS } from "@nivo/shared";
 import { Page } from "../components/Page";
 import { CreditCard } from "lucide-react";
 import { Button } from "../components/Button";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, legalVersionFromError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../lib/toast";
 
@@ -25,8 +25,10 @@ export default function Pay() {
   const [busy, setBusy] = useState(false);
   const [immediateStart, setImmediateStart] = useState(false);
   const [simulateReady, setSimulateReady] = useState(false);
-  const [termsVersion, setTermsVersion] = useState("2025-01");
-  const [withdrawalVersion, setWithdrawalVersion] = useState("2025-01");
+  const [termsVersion, setTermsVersion] = useState("");
+  const [withdrawalVersion, setWithdrawalVersion] = useState("");
+  const [versionsReady, setVersionsReady] = useState(false);
+  const [acceptAgain, setAcceptAgain] = useState<string | null>(null);
 
   useEffect(() => {
     if (searchParams.get("payment") === "cancelled" || searchParams.get("payment") === "cancel") {
@@ -37,27 +39,63 @@ export default function Pay() {
     }
   }, [searchParams, setSearchParams, toast]);
 
+  async function loadCurrentVersions() {
+    const terms = await api.get<{ version: string }>("/v1/legal/terms");
+    setTermsVersion(terms.version);
+    try {
+      const refund = await api.get<{ version: string }>("/v1/legal/refund");
+      setWithdrawalVersion(refund.version);
+    } catch {
+      setWithdrawalVersion("");
+    }
+    setVersionsReady(true);
+  }
+
   useEffect(() => {
-    void api
-      .get<{ documents: { slug: string; version: string }[] }>("/v1/legal")
-      .then((res) => {
-        const terms = res.documents.find((d) => d.slug === "terms");
-        const refund = res.documents.find((d) => d.slug === "refund");
-        if (terms) setTermsVersion(terms.version);
-        if (refund) setWithdrawalVersion(refund.version);
-      })
-      .catch(() => undefined);
+    let cancelled = false;
+    void loadCurrentVersions().catch(() => {
+      if (!cancelled) setVersionsReady(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function consentBody() {
     return {
       termsVersion,
-      withdrawalVersion,
+      withdrawalVersion: withdrawalVersion || termsVersion,
       immediateStart: true as const,
     };
   }
 
+  async function askToAcceptCurrent(err: unknown) {
+    const terms = legalVersionFromError(err, "terms");
+    const refund = legalVersionFromError(err, "refund");
+    if (terms) setTermsVersion(terms);
+    if (refund) setWithdrawalVersion(refund);
+    if (!terms && !refund) {
+      try {
+        await loadCurrentVersions();
+      } catch {
+        /* keep the versions already on screen */
+      }
+    }
+    setImmediateStart(false);
+    setSimulateReady(false);
+    setAcceptAgain(
+      err instanceof ApiError
+        ? err.message
+        : "The terms were updated. Please accept the current version to continue.",
+    );
+    toast.info("Please accept the current terms", "They changed before this payment. Tick the box again to continue.");
+  }
+
   async function checkout() {
+    if (!versionsReady || !termsVersion) {
+      toast.info("Terms are still loading", "Wait a moment, then try again.");
+      return;
+    }
     if (!immediateStart) {
       toast.error("Please confirm that the service may start immediately");
       return;
@@ -70,11 +108,16 @@ export default function Pay() {
         return;
       }
       if (res.mode === "simulate") {
+        setAcceptAgain(null);
         setSimulateReady(true);
         return;
       }
       toast.error("Checkout is not available yet", "Try again shortly.");
     } catch (err) {
+      if (err instanceof ApiError && err.code === "TERMS_REACCEPT_REQUIRED") {
+        await askToAcceptCurrent(err);
+        return;
+      }
       toast.error("Could not start checkout", err instanceof ApiError ? err.message : undefined);
     } finally {
       setBusy(false);
@@ -88,6 +131,10 @@ export default function Pay() {
       await refresh();
       navigate("/onboarding/identity", { replace: true });
     } catch (err) {
+      if (err instanceof ApiError && err.code === "TERMS_REACCEPT_REQUIRED") {
+        await askToAcceptCurrent(err);
+        return;
+      }
       toast.error("Could not complete demo payment", err instanceof ApiError ? err.message : undefined);
     } finally {
       setBusy(false);
@@ -114,21 +161,33 @@ export default function Pay() {
           <li>Encrypted identity onboarding</li>
           <li>Housing request and document vault</li>
         </ul>
+        {acceptAgain ? (
+          <p role="status" className="mt-5 rounded-xl border border-orange/40 bg-orange/10 px-3 py-2 text-sm text-charcoal">
+            {acceptAgain}
+          </p>
+        ) : null}
         <label className="mt-5 flex items-start gap-3 text-sm">
           <input
             type="checkbox"
             className="mt-1"
             checked={immediateStart}
-            onChange={(e) => setImmediateStart(e.target.checked)}
+            disabled={!versionsReady}
+            onChange={(e) => {
+              setImmediateStart(e.target.checked);
+              if (e.target.checked) setAcceptAgain(null);
+            }}
           />
           <span>
-            I accept the current Terms (v{termsVersion}) and ask NIVO to start the service now (withdrawal policy
-            v{withdrawalVersion}).
+            {versionsReady
+              ? `I accept the current Terms (v${termsVersion}) and ask NIVO to start the service now${
+                  withdrawalVersion ? ` (withdrawal policy v${withdrawalVersion})` : ""
+                }.`
+              : "Loading the current Terms…"}
           </span>
         </label>
         <div className="mt-5">
           {!simulateReady ? (
-            <Button className="w-full" onClick={() => void checkout()} disabled={busy}>
+            <Button className="w-full" onClick={() => void checkout()} disabled={busy || !versionsReady}>
               <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
               {busy ? "Starting…" : `Order with obligation to pay · ${eurPrice}`}
             </Button>

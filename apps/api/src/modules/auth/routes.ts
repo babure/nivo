@@ -9,7 +9,6 @@ import {
 import { z } from "zod";
 import { csrfCookieName, issueCsrfToken, peekCsrfToken } from "../../lib/csrf.js";
 import { AppError, parseStrict } from "../../lib/errors.js";
-import { markStepUp } from "../../lib/step-up.js";
 import { requireAuthContext, sessionCookieName } from "../../plugins/auth.js";
 import {
   buildGoogleAuthorizeUrl,
@@ -46,7 +45,6 @@ const loginSchema = z.object({
   email: emailSchema,
   // do not apply strength rules at login (legacy passwords must still be able to sign in)
   password: passwordPresentSchema,
-  totp: z.string().regex(/^\d{6}$/, "Enter the 6-digit authenticator code").optional(),
 });
 const tokenSchema = z.object({
   token: z.string().min(20, "Invalid or incomplete token").max(200),
@@ -55,10 +53,6 @@ const forgotSchema = z.object({ email: emailSchema });
 const resetSchema = z.object({
   token: z.string().min(20, "Invalid or incomplete token").max(200),
   password: passwordSchema,
-});
-const totpEnableSchema = z.object({
-  secret: z.string().min(16).max(64),
-  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit authenticator code"),
 });
 const deletionSchema = z.object({
   password: passwordPresentSchema.optional(),
@@ -129,7 +123,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         id: user.id,
         fullName: user.fullName,
         role: user.role,
-        totpEnabled: user.totpSecret !== null,
       },
     });
   });
@@ -157,24 +150,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/v1/auth/me", { preHandler: app.requireAuth }, async (req) => {
     return auth.me(requireAuthContext(req));
-  });
-
-  app.post("/v1/auth/2fa/setup", { preHandler: app.requireAuth, ...limit }, async (req) => {
-    return auth.beginTotpSetup(requireAuthContext(req).user.id);
-  });
-
-  app.post("/v1/auth/2fa/enable", { preHandler: app.requireAuth, ...limit }, async (req, reply) => {
-    const { secret, code } = parseStrict(totpEnableSchema, req.body);
-    await auth.enableTotp(requireAuthContext(req).user.id, secret, code);
-    return reply.send({ status: "enabled" });
-  });
-
-  app.post("/v1/auth/2fa/step-up", { preHandler: app.requireAuth, ...limit }, async (req, reply) => {
-    const { code } = parseStrict(z.object({ code: z.string().regex(/^\d{6}$/) }), req.body);
-    const ctx = requireAuthContext(req);
-    await auth.verifyTotp(ctx.user.id, code);
-    markStepUp(ctx.sessionId);
-    return reply.send({ status: "ok", expiresInSeconds: 300 });
   });
 
   app.get("/v1/auth/csrf", { preHandler: app.requireAuth }, async (req, reply) => {

@@ -481,6 +481,11 @@ describe("partners, legal and consultancy routes", () => {
     });
     expect(accept.statusCode).toBe(201);
 
+    const list = await app.inject({ method: "GET", url: "/v1/legal" });
+    const termsDocs = (list.json().documents as { slug: string; version: string }[]).filter((d) => d.slug === "terms");
+    expect(termsDocs).toHaveLength(1);
+    expect(termsDocs[0]?.version).toBe("2025-11-draft2");
+
     const meFresh = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie: student.cookie } });
     expect(meFresh.json().termsReacceptRequired).toBe(false);
 

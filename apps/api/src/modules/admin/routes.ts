@@ -11,8 +11,7 @@ import {
 import { z } from "zod";
 import { csvRow } from "../../lib/csv.js";
 import { AppError, parseStrict, parseWith } from "../../lib/errors.js";
-import { isStepUpFresh } from "../../lib/step-up.js";
-import { requireAuthContext, requireStaffMfa } from "../../plugins/auth.js";
+import { requireAuthContext } from "../../plugins/auth.js";
 import { createArgon2Hasher } from "../auth/service.js";
 import { UniqueViolationError, type UserRecord } from "../../repositories/types.js";
 import { ACCOMMODATION_NOTIFY_SETTING } from "../accommodation/service.js";
@@ -69,23 +68,10 @@ const textsBody = z.object({
   texts: z.record(z.string().max(2000)).refine((o) => Object.keys(o).length <= 80, "Too many text keys"),
 });
 
-function assertStepUp(sessionId: string) {
-  if (
-    !isStepUpFresh(sessionId) &&
-    process.env.NODE_ENV !== "test" &&
-    process.env.ALLOW_STAFF_WITHOUT_MFA !== "true"
-  ) {
-    throw new AppError("STEP_UP_REQUIRED", "Re-confirm with your two-factor code.");
-  }
-}
-
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   const { repos, payments, cards, identity, audit } = app.services;
 
   app.addHook("preHandler", app.requireAuth);
-  app.addHook("preHandler", async (req) => {
-    requireStaffMfa(req);
-  });
 
   app.get("/v1/admin/me", async (req) => {
     const ctx = requireAuthContext(req);
@@ -93,8 +79,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       id: ctx.user.id,
       role: ctx.user.role,
       permissions: ctx.permissions,
-      totpEnabled: ctx.user.totpSecret !== null,
-      stepUpFresh: isStepUpFresh(ctx.sessionId),
     };
   });
 
@@ -275,7 +259,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const { id } = parseStrict(idParams, req.params);
       const { reason } = parseStrict(reasonBody, req.body);
       const ctx = requireAuthContext(req);
-      assertStepUp(ctx.sessionId);
       return identity.reveal(id, ctx.user.id, reason);
     },
   );
@@ -287,7 +270,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const { id } = parseStrict(idParams, req.params);
       const { reason } = parseStrict(reasonBody, req.body);
       const ctx = requireAuthContext(req);
-      assertStepUp(ctx.sessionId);
       if (ctx.user.id === id) throw new AppError("FORBIDDEN", "You cannot refund your own account.");
 
       await payments.refund(id, ctx.user.id, reason);
@@ -405,7 +387,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/v1/admin/exports/students.csv", { preHandler: requirePermission("exports:students") }, async (req, reply) => {
     const ctx = requireAuthContext(req);
-    assertStepUp(ctx.sessionId);
     const [users, profiles] = await Promise.all([repos.users.list(), repos.profiles.list()]);
     const byId = new Map(profiles.map((p) => [p.userId, p]));
     const rows = [
@@ -440,7 +421,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/v1/admin/exports/leads.csv", { preHandler: requirePermission("exports:leads") }, async (req, reply) => {
     const ctx = requireAuthContext(req);
-    assertStepUp(ctx.sessionId);
     const leads = await repos.leads.list();
     const rows = [
       csvRow(["id", "userId", "city", "budget", "roomType", "status", "phone", "createdAt"]),
@@ -469,7 +449,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           id: u.id,
           email: u.email,
           fullName: u.fullName,
-          totpEnabled: u.totpSecret !== null,
           createdAt: u.createdAt,
         })),
     };
@@ -478,7 +457,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.post("/v1/admin/admins", { preHandler: requirePermission("admins:manage") }, async (req, reply) => {
     const body = parseStrict(createAdminSchema, req.body);
     const ctx = requireAuthContext(req);
-    assertStepUp(ctx.sessionId);
 
     const email = body.email;
     if (await repos.users.findByEmail(email)) {
@@ -503,7 +481,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       googleSub: null,
       avatarUrl: null,
       passwordSet: true,
-      totpSecret: null,
       failedLoginCount: 0,
       lockedUntil: null,
       createdAt: now,
@@ -560,7 +537,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       googleSub: null,
       avatarUrl: null,
       passwordSet: false,
-      totpSecret: null,
       failedLoginCount: 0,
       lockedUntil: null,
       createdAt: now,
@@ -614,7 +590,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const body = parseWith(createConsultancySchema, req.body);
       const ctx = requireAuthContext(req);
-      assertStepUp(ctx.sessionId);
 
       const referralCode = body.code.toUpperCase();
       if (await repos.consultancies.findByReferralCode(referralCode)) {
@@ -652,7 +627,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const { id } = parseStrict(idParams, req.params);
       const body = parseStrict(addManagerSchema, req.body);
       const ctx = requireAuthContext(req);
-      assertStepUp(ctx.sessionId);
 
       const org = await repos.consultancies.findById(id);
       if (!org) throw new AppError("NOT_FOUND", "Consultancy not found.");

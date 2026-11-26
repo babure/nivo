@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import type { EncryptedBlob } from "@nivo/shared";
 import type { Db } from "../db/client.js";
 import * as s from "../db/schema.js";
@@ -57,7 +57,6 @@ function mapUser(row: typeof s.users.$inferSelect): UserRecord {
     googleSub: row.googleSub ?? null,
     avatarUrl: row.avatarUrl ?? null,
     passwordSet: row.passwordSet,
-    totpSecret: (row.totpSecret as EncryptedBlob | null) ?? null,
     failedLoginCount: row.failedLoginCount,
     lockedUntil: row.lockedUntil,
     createdAt: row.createdAt,
@@ -137,7 +136,6 @@ export class PostgresRepositories implements Repositories {
             googleSub: user.googleSub,
             avatarUrl: user.avatarUrl,
             passwordSet: user.passwordSet,
-            totpSecret: user.totpSecret,
             failedLoginCount: user.failedLoginCount,
             lockedUntil: user.lockedUntil,
             createdAt: user.createdAt,
@@ -173,6 +171,12 @@ export class PostgresRepositories implements Repositories {
         .where(and(eq(s.users.googleSub, googleSub), isNull(s.users.deletedAt)))
         .limit(1);
       return row ? mapUser(row) : null;
+    },
+    releaseDeletedGoogleSub: async (googleSub) => {
+      await this.db
+        .update(s.users)
+        .set({ googleSub: null, updatedAt: new Date() })
+        .where(and(eq(s.users.googleSub, googleSub), isNotNull(s.users.deletedAt)));
     },
     update: async (id, patch) => {
       const [row] = await this.db
@@ -799,24 +803,34 @@ export class PostgresRepositories implements Repositories {
 
   legal: Repositories["legal"] = {
     list: async () => {
-      const rows = await this.db.select().from(s.legalDocuments).where(eq(s.legalDocuments.published, true));
-      return rows.map(
-        (r): LegalDocumentRecord => ({
+      const rows = await this.db
+        .select()
+        .from(s.legalDocuments)
+        .where(eq(s.legalDocuments.published, true))
+        .orderBy(sql`${s.legalDocuments.publishedAt} DESC NULLS LAST`);
+      const seen = new Set<string>();
+      const current: LegalDocumentRecord[] = [];
+      for (const r of rows) {
+        if (seen.has(r.slug)) continue;
+        seen.add(r.slug);
+        current.push({
           slug: r.slug,
           version: r.version,
           title: r.title,
           body: r.body,
           published: r.published,
           publishedAt: r.publishedAt,
-        }),
-      );
+        });
+      }
+      return current;
     },
     getPublished: async (slug) => {
       const rows = await this.db
         .select()
         .from(s.legalDocuments)
         .where(and(eq(s.legalDocuments.slug, slug), eq(s.legalDocuments.published, true)))
-        .orderBy(desc(s.legalDocuments.publishedAt));
+        .orderBy(sql`${s.legalDocuments.publishedAt} DESC NULLS LAST`)
+        .limit(1);
       const r = rows[0];
       return r
         ? {

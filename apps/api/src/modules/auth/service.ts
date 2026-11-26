@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import argon2 from "argon2";
-import { authenticator } from "otplib";
 import {
   DEFAULT_ROLES,
-  decryptField,
-  deriveKeyFromSecret,
-  encryptField,
   type Permission,
   type registerSchema,
 } from "@nivo/shared";
@@ -67,7 +63,6 @@ export type PublicUser = {
   phone: string;
   emailVerified: boolean;
   role: string | null;
-  totpEnabled: boolean;
   avatarUrl: string | null;
   passwordSet: boolean;
   googleLinked: boolean;
@@ -81,7 +76,6 @@ export function toPublicUser(u: UserRecord): PublicUser {
     phone: u.phone ?? "",
     emailVerified: u.emailVerifiedAt !== null,
     role: u.role,
-    totpEnabled: u.totpSecret !== null,
     avatarUrl: u.avatarUrl,
     passwordSet: u.passwordSet,
     googleLinked: Boolean(u.googleSub),
@@ -103,18 +97,15 @@ export type AuthServiceDeps = {
   mailer: Mailer;
   hasher: PasswordHasher;
   audit: AuditLogger;
-  encryptionSecret: string;
   now?: () => Date;
 };
 
 export class AuthService {
   private readonly now: () => Date;
-  private readonly key: Buffer;
   private dummyHash: Promise<string> | null = null;
 
   constructor(private readonly deps: AuthServiceDeps) {
     this.now = deps.now ?? (() => new Date());
-    this.key = deriveKeyFromSecret(deps.encryptionSecret);
   }
 
   /** Burns comparable CPU when the account does not exist (timing equalisation). */
@@ -132,7 +123,11 @@ export class AuthService {
     ] as const) {
       const doc = await repos.legal.getPublished(slug);
       if (doc && doc.version !== accepted) {
-        throw new AppError("TERMS_REACCEPT_REQUIRED", `Please accept the current ${slug} version.`);
+        throw new AppError(
+          "TERMS_REACCEPT_REQUIRED",
+          `Please accept the current ${slug === "terms" ? "Terms" : "Privacy Policy"} to continue.`,
+          [{ slug, version: doc.version }],
+        );
       }
     }
 
@@ -163,7 +158,6 @@ export class AuthService {
       googleSub: null,
       avatarUrl: null,
       passwordSet: true,
-      totpSecret: null,
       failedLoginCount: 0,
       lockedUntil: null,
       createdAt: now,
@@ -275,6 +269,7 @@ export class AuthService {
     let created = false;
 
     if (!user) {
+      await repos.users.releaseDeletedGoogleSub(profile.sub);
       user = await repos.users.findByEmail(email);
       if (user) {
         await repos.users.update(user.id, {
@@ -310,7 +305,6 @@ export class AuthService {
         googleSub: profile.sub,
         avatarUrl,
         passwordSet: false,
-        totpSecret: null,
         failedLoginCount: 0,
         lockedUntil: null,
         createdAt: now,
@@ -408,7 +402,7 @@ export class AuthService {
   }
 
   async login(
-    input: { email: string; password: string; totp?: string },
+    input: { email: string; password: string },
     ctx: RequestContext = {},
   ): Promise<{ user: UserRecord; sessionToken: string; expiresAt: Date }> {
     const { repos, hasher } = this.deps;
@@ -451,14 +445,6 @@ export class AuthService {
 
     if (!user.emailVerifiedAt) {
       throw new AppError("AUTH_EMAIL_NOT_VERIFIED", "Please verify your email first.");
-    }
-
-    if (user.totpSecret) {
-      if (!input.totp) throw new AppError("AUTH_2FA_REQUIRED", "Two-factor code required.");
-      const secret = decryptField(user.totpSecret, this.key);
-      if (!authenticator.check(input.totp, secret)) {
-        throw new AppError("AUTH_INVALID_CREDENTIALS", "Invalid email or password.");
-      }
     }
 
     await repos.users.update(user.id, { failedLoginCount: 0, lockedUntil: null });
@@ -519,38 +505,6 @@ export class AuthService {
     });
     await this.deps.repos.sessions.deleteAllForUser(rec.userId);
     await this.deps.audit.append({ actorId: rec.userId, action: "auth.reset_password", entityType: "user", entityId: rec.userId });
-  }
-
-  /** Step 1 of TOTP enrolment: returns a secret for the authenticator app (not yet active). */
-  async beginTotpSetup(userId: string): Promise<{ secret: string; otpauthUrl: string }> {
-    const user = await this.deps.repos.users.findById(userId);
-    if (!user) throw new AppError("NOT_FOUND", "User not found.");
-    if (user.totpSecret) throw new AppError("CONFLICT", "Two-factor is already enabled.");
-    const secret = authenticator.generateSecret();
-    return { secret, otpauthUrl: authenticator.keyuri(user.email, "NIVO", secret) };
-  }
-
-  /** Step 2: proves the user holds the secret, then stores it encrypted. */
-  async enableTotp(userId: string, secret: string, code: string): Promise<void> {
-    if (!authenticator.check(code, secret)) {
-      throw new AppError("VALIDATION_FAILED", "Invalid two-factor code.");
-    }
-    await this.deps.repos.users.update(userId, {
-      totpSecret: encryptField(secret, this.key, "v1"),
-    });
-    await this.deps.audit.append({ actorId: userId, action: "auth.totp_enabled", entityType: "user", entityId: userId });
-  }
-
-  /** Re-confirm TOTP for privileged actions (REQ-ADM-05). */
-  async verifyTotp(userId: string, code: string): Promise<void> {
-    const user = await this.deps.repos.users.findById(userId);
-    if (!user?.totpSecret) {
-      throw new AppError("AUTH_2FA_REQUIRED", "Two-factor authentication is not enabled.");
-    }
-    const secret = decryptField(user.totpSecret, this.key);
-    if (!authenticator.check(code, secret)) {
-      throw new AppError("AUTH_2FA_INVALID", "Invalid two-factor code.");
-    }
   }
 
   /**

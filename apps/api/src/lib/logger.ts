@@ -5,7 +5,6 @@ const SENSITIVE_KEYS = [
   "newPassword",
   "currentPassword",
   "token",
-  "totp",
   "email",
   "phone",
   "fullName",

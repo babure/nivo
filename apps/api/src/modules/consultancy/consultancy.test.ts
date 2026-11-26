@@ -49,7 +49,6 @@ describe("ConsultancyService", () => {
       googleSub: null,
       avatarUrl: null,
       passwordSet: true,
-      totpSecret: null,
       failedLoginCount: 0,
       lockedUntil: null,
       createdAt: now,

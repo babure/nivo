@@ -90,7 +90,11 @@ export async function legalRoutes(app: FastifyInstance): Promise<void> {
     const doc = await repos.legal.getPublished(slug);
     if (!doc) throw new AppError("NOT_FOUND", "Document not found.");
     if (doc.version !== version) {
-      throw new AppError("TERMS_REACCEPT_REQUIRED", `Current ${slug} version is ${doc.version}.`);
+      throw new AppError(
+        "TERMS_REACCEPT_REQUIRED",
+        "That version is no longer current. Please accept the latest version.",
+        [{ slug, version: doc.version }],
+      );
     }
     const { user } = requireAuthContext(req);
     const acceptedAt = new Date();

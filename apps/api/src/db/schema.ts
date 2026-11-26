@@ -90,7 +90,6 @@ export const users = pgTable(
     avatarUrl: varchar("avatar_url", { length: 512 }),
     /** False for Google-only accounts until the user sets a password */
     passwordSet: boolean("password_set").notNull().default(true),
-    totpSecret: jsonb("totp_secret").$type<EncryptedBlobJson>(),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
     createdAt: createdAt(),

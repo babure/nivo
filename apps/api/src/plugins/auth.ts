@@ -91,15 +91,3 @@ export function requireAuthContext(req: FastifyRequest): AuthContext {
   if (!req.auth) throw new AppError("UNAUTHORIZED", "Authentication required.");
   return req.auth;
 }
-
-/** Non-student roles that must enroll TOTP before using privileged surfaces (REQ-AUTH-05/09). */
-export const STAFF_ROLES = new Set(["super_admin", "consultancy"]);
-
-export function requireStaffMfa(req: FastifyRequest): void {
-  const ctx = requireAuthContext(req);
-  if (!ctx.user.role || !STAFF_ROLES.has(ctx.user.role)) return;
-  if (ctx.user.totpSecret) return;
-  // Tests / local seed: allow until enrolled, but surface requirement via /me.totpEnabled.
-  if (process.env.NODE_ENV === "test" || process.env.ALLOW_STAFF_WITHOUT_MFA === "true") return;
-  throw new AppError("AUTH_2FA_REQUIRED", "Enable two-factor authentication before continuing.");
-}

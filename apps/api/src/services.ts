@@ -49,7 +49,6 @@ export function buildServices(deps: {
       mailer,
       hasher,
       audit,
-      encryptionSecret: config.IDENTITY_ENCRYPTION_KEY,
       now: deps.now,
     }),
     payments: new PaymentsService({

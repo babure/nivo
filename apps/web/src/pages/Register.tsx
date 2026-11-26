@@ -5,7 +5,7 @@ import { Field, FieldGrid, FormSection, Page } from "../components/Page";
 import { UserPlus } from "lucide-react";
 import { Button } from "../components/Button";
 import { GoogleSignInButton } from "../components/GoogleSignIn";
-import { api, formatApiError } from "../lib/api";
+import { api, ApiError, formatApiError, legalVersionFromError } from "../lib/api";
 import { useToast } from "../lib/toast";
 
 /** Fallback if /v1/legal is unreachable — must match API DEFAULT_LEGAL. */
@@ -113,6 +113,18 @@ export default function Register() {
       await api.post("/v1/auth/register", parsed.data);
       navigate("/verify-email", { state: { email: parsed.data.email } });
     } catch (err) {
+      if (err instanceof ApiError && err.code === "TERMS_REACCEPT_REQUIRED") {
+        const terms = legalVersionFromError(err, "terms");
+        const privacy = legalVersionFromError(err, "privacy");
+        if (terms) setTermsVersion(terms);
+        if (privacy) setPrivacyVersion(privacy);
+        set("accepted", false);
+        setErrors({
+          accepted: err.message || "These documents were updated. Please accept the current version to continue.",
+        });
+        toast.info("Please accept the current terms", "They changed. Tick the box again to continue.");
+        return;
+      }
       toast.error(
         "Could not create account",
         formatApiError(err, "Check the form and try again."),

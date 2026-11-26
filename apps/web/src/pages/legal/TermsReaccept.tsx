@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Field, Page } from "../../components/Page";
 import { Button } from "../../components/Button";
-import { api, ApiError, formatApiError } from "../../lib/api";
+import { api, ApiError, formatApiError, legalVersionFromError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { homePathFor } from "../../lib/navigation";
 import { useToast } from "../../lib/toast";
@@ -42,6 +42,13 @@ export function TermsReaccept() {
       toast.success("Terms accepted");
       navigate(next ? homePathFor(next) : "/dashboard", { replace: true });
     } catch (err) {
+      const current = legalVersionFromError(err, "terms");
+      if (err instanceof ApiError && err.code === "TERMS_REACCEPT_REQUIRED" && current) {
+        setVersion(current);
+        setAccepted(false);
+        toast.info("Please accept the current Terms", err.message);
+        return;
+      }
       toast.error(
         "Could not save acceptance",
         formatApiError(err, err instanceof ApiError ? err.message : "Could not save acceptance."),
