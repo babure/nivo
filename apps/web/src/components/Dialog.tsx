@@ -1,4 +1,5 @@
 import { useEffect, useId, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 type Props = {
@@ -33,7 +34,9 @@ export function Dialog({ open, title, description, onClose, children, footer, wi
 
   if (!open) return null;
 
-  return (
+  // Portal to body so the scrim escapes the main column (z-0). The side nav is a
+  // sibling at z-40 and would otherwise stay undimmed above every dialog.
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end justify-center p-0 sm:items-center sm:p-6">
       <button
         type="button"
@@ -72,6 +75,7 @@ export function Dialog({ open, title, description, onClose, children, footer, wi
           </footer>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
